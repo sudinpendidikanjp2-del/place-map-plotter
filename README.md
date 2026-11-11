@@ -57,7 +57,7 @@ Portal Dapodik baru (dapo.kemendikdasmen.go.id) tidak menyediakan API publik tan
 
 ## Rilis otomatis
 
-Setiap push ke `main` menjalankan `.github/workflows/release.yml`: tes dan build (`ci.yml`), lalu membuat rilis GitHub `vMAYOR.MINOR.NOMOR_EKSEKUSI` dengan lampiran build web, dan mendorong image Docker ke `ghcr.io/<pemilik>/<repo>` bertag versi, `latest`, dan SHA. Mayor dan minor diambil dari `version` di `package.json`. Tambahkan `[skip release]` pada pesan commit untuk melewati rilis. Pull request menjalankan `ci.yml` saja.
+Setiap push ke `main` menjalankan `.github/workflows/release.yml`: tes dan build (`ci.yml`), lalu membuat rilis GitHub `vMAYOR.MINOR.NOMOR_EKSEKUSI` dengan lampiran build web, dan mendorong image Docker ke `ghcr.io/<pemilik>/<repo>` bertag versi, `latest`, dan SHA. Image pekerja sinkronisasi terbit terpisah di `ghcr.io/<pemilik>/<repo>-sync` dengan tag yang sama. Mayor dan minor diambil dari `version` di `package.json`. Tambahkan `[skip release]` pada pesan commit untuk melewati rilis. Pull request menjalankan `ci.yml` saja.
 
 Setelah rilis pertama, atur paket di GitHub (Packages) agar terlihat oleh VPS: buat publik, atau login `docker login ghcr.io` di VPS dengan token yang punya `read:packages`.
 

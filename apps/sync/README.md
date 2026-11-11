@@ -48,7 +48,7 @@ Kapasitas: sekitar 650 sekolah per jam. Seluruh Indonesia tidak mungkin dengan c
 15 1 * * 0 cd /opt/peta/deploy && docker compose --profile sync run --rm sync >> /var/log/peta-sync.log 2>&1
 ```
 
-Layanan `sync` ada di `deploy/docker-compose.yml` (profil `sync`, tidak ikut `up -d`). Isi `PETA_URL` dan `PETA_TOKEN` di `deploy/.env`. Layar Sinkronisasi memberi peringatan bila penarikan berhasil terakhir lebih dari 10 hari lalu.
+Image `ghcr.io/<pemilik>/<repo>-sync` terbit otomatis bersama tiap rilis (bisa juga dibangun lokal: `docker compose --profile sync build sync`). Layanan `sync` ada di `deploy/docker-compose.yml` (profil `sync`, tidak ikut `up -d`). Isi `PETA_URL` dan `PETA_TOKEN` di `deploy/.env`. Layar Sinkronisasi memberi peringatan bila penarikan berhasil terakhir lebih dari 10 hari lalu.
 
 ## Uji
 
