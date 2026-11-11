@@ -372,6 +372,10 @@ export function createApp(config: Config, sql: Sql, opts: { trustProxy?: boolean
   router.post("/api/sync/runs", "editor", async (c) => sendJson(c.res, 201, await syncRuns.start(await readJson(c.req, 10_000))), { token: true });
   router.patch("/api/sync/runs/:id", "editor", async (c) => sendJson(c.res, 200, await syncRuns.finish(c.params.id!, await readJson(c.req, 100_000))), { token: true });
 
+  router.post("/api/sync/request", "admin", async (c) => sendJson(c.res, 201, await syncRuns.request("dapodik", me(c).id)));
+  router.post("/api/sync/claim", "editor", async (c) => sendJson(c.res, 200, await syncRuns.claim(await readJson(c.req, 10_000))), { token: true });
+  router.post("/api/sync/runs/:id/cancel", "admin", async (c) => sendJson(c.res, 200, await syncRuns.cancel(c.params.id!)));
+
   router.get("/api/geocode/status", "admin", async (c) => sendJson(c.res, 200, await geocoder.status()));
   router.post("/api/geocode/run", "admin", async (c) => {
     const body = await readJson<{ limit?: unknown }>(c.req, 5_000);

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useAuth } from "../../app/auth.tsx";
 import { api, type SyncRun } from "../../data/api.ts";
 import { formatNumber } from "../../shared/lib/format.ts";
 import { useResource } from "../../shared/lib/hooks.ts";
@@ -6,7 +7,8 @@ import { Button, Dialog, EmptyState, ErrorState, Field, Input, SkeletonRows } fr
 import { useToast } from "../../shared/ui/toast.tsx";
 import { cn } from "../../shared/lib/cn.ts";
 
-const STATUS: Record<SyncRun["status"], string> = { berjalan: "Berjalan", selesai: "Selesai", gagal: "Gagal", ditolak: "Ditolak penjaga" };
+const STATUS: Record<SyncRun["status"], string> = { menunggu: "Menunggu pekerja", berjalan: "Berjalan", selesai: "Selesai", gagal: "Gagal", ditolak: "Ditolak penjaga", dibatalkan: "Dibatalkan" };
+const WORKER_ALIVE_MS = 3 * 60_000;
 const STALE_DAYS = 10;
 
 const when = (iso: string) => new Date(iso).toLocaleString("id-ID", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -26,23 +28,73 @@ export function SyncPage() {
 }
 
 function Runs() {
+  const toast = useToast();
+  const { user } = useAuth();
   const runs = useResource((s) => api.sync.runs(s), []);
+  const [busy, setBusy] = useState(false);
+  const active = runs.data?.items.some((r) => r.status === "menunggu" || r.status === "berjalan") ?? false;
+  const { reload } = runs;
+  // Selama ada eksekusi aktif, muat ulang tiap 5 detik supaya kemajuan terlihat.
+  useEffect(() => {
+    if (!active) return;
+    const t = setInterval(reload, 5000);
+    return () => clearInterval(t);
+  }, [active, reload]);
+  const seen = runs.data?.workerSeenAt ? new Date(runs.data.workerSeenAt).getTime() : null;
+  const workerAlive = seen !== null && Date.now() - seen < WORKER_ALIVE_MS;
+
+  async function request() {
+    setBusy(true);
+    try {
+      await api.sync.request();
+      toast.ok("Permintaan dikirim. Pekerja mengambilnya dalam hitungan detik.");
+      runs.reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Gagal meminta sinkronisasi.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function cancel(id: string) {
+    try {
+      await api.sync.cancel(id);
+      runs.reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Gagal membatalkan.");
+    }
+  }
   const last = runs.data?.lastSuccess;
   const staleDays = last ? Math.floor((Date.now() - new Date(last.finishedAt ?? last.startedAt).getTime()) / 86_400_000) : null;
   return (
     <section aria-label="Riwayat sinkronisasi" className="overflow-hidden rounded-card border border-line bg-surface">
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <h2 className="font-semibold">Riwayat penarikan Dapodik</h2>
-        <Button variant="ghost" icon="undo" onClick={runs.reload}>
-          Muat ulang
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" icon="undo" onClick={runs.reload}>
+            Muat ulang
+          </Button>
+          {user?.role === "admin" && (
+            <Button variant="primary" icon="download" busy={busy} disabled={active} onClick={() => void request()}>
+              Sinkronkan sekarang
+            </Button>
+          )}
+        </div>
       </div>
+      {runs.data && (
+        <p className={cn("border-b border-line px-4 py-2 text-[13px]", workerAlive ? "text-ink-2" : "bg-danger/10 text-danger")} role={workerAlive ? undefined : "alert"}>
+          {workerAlive
+            ? "Pekerja terhubung. Penarikan juga berjalan terjadwal."
+            : seen === null
+              ? "Pekerja belum pernah terhubung. Jalankan layanan sync di server (lihat apps/sync/README.md); permintaan akan menunggu sampai pekerja aktif."
+              : `Pekerja terakhir terlihat ${when(runs.data.workerSeenAt!)}. Periksa layanan sync di server.`}
+        </p>
+      )}
       {runs.status === "loading" && !runs.data && <SkeletonRows rows={3} />}
       {runs.status === "error" && <ErrorState error={runs.error} onRetry={runs.reload} />}
       {runs.data && (
         <>
           {runs.data.items.length === 0 ? (
-            <EmptyState title="Belum ada penarikan">Pekerja terjadwal melaporkan setiap eksekusinya di sini. Lihat apps/sync/README.md untuk memasangnya.</EmptyState>
+            <EmptyState title="Belum ada penarikan">Tekan "Sinkronkan sekarang" atau tunggu jadwal pekerja. Pekerja melaporkan setiap eksekusinya di sini. Lihat apps/sync/README.md untuk memasangnya.</EmptyState>
           ) : (
             <>
               {staleDays !== null && staleDays >= STALE_DAYS && (
@@ -58,7 +110,7 @@ function Runs() {
               <ul>
                 {runs.data.items.map((r) => (
                   <li key={r.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-line px-4 py-3 last:border-0">
-                    <span className={cn("rounded-md px-2 py-0.5 text-[12px] font-medium", r.status === "selesai" ? "bg-ok/15 text-ok" : r.status === "berjalan" ? "bg-surface-2 text-ink-2" : "bg-danger/10 text-danger")}>{STATUS[r.status]}</span>
+                    <span className={cn("rounded-md px-2 py-0.5 text-[12px] font-medium", r.status === "selesai" ? "bg-ok/15 text-ok" : r.status === "berjalan" || r.status === "menunggu" || r.status === "dibatalkan" ? "bg-surface-2 text-ink-2" : "bg-danger/10 text-danger")}>{STATUS[r.status]}</span>
                     <div className="min-w-0 flex-1">
                       <p className="font-medium">
                         {r.source} · {r.scope}
@@ -68,6 +120,11 @@ function Runs() {
                       </p>
                       {r.message && <p className="text-[13px] text-ink-2">{r.message}</p>}
                     </div>
+                    {r.status === "menunggu" && user?.role === "admin" && (
+                      <Button variant="ghost" onClick={() => void cancel(r.id)}>
+                        Batalkan
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ul>

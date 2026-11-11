@@ -64,7 +64,7 @@ function writeCache(file, data) {
  * @param {number} cfg.delayMaxMs
  * @param {number} cfg.refreshDays   data di cache lebih muda dari ini tidak diambil ulang
  */
-export async function collectDapodik(cfg, log = console.log) {
+export async function collectDapodik(cfg, log = console.log, onProgress = () => {}) {
   const { chromium } = createRequire(import.meta.url)("playwright");
   const browser = await chromium.launch({ headless: cfg.headless !== false });
   const context = await browser.newContext({ locale: "id-ID" });
@@ -168,7 +168,7 @@ export async function collectDapodik(cfg, log = console.log) {
       for (const r of rows) {
         const npsn = npsnKey && r[npsnKey] ? String(r[npsnKey]).trim() : null;
         if (npsn && !npsnList.has(npsn)) {
-          npsnList.set(npsn, r);
+          npsnList.set(npsn, { ...r, __kecamatan: String(k[namaKey] ?? "") });
           added++;
         }
       }
@@ -185,6 +185,7 @@ export async function collectDapodik(cfg, log = console.log) {
     }
     if (maxPerRun > 0 && todo.length > maxPerRun) todo = todo.slice(0, maxPerRun);
     log(`Tahap 2: detail ${npsnList.size} sekolah (${details.length} dari cache, ${todo.length} diambil)`);
+    let stopped = null;
     for (let i = 0; i < todo.length; i++) {
       const npsn = todo[i];
       try {
@@ -196,15 +197,23 @@ export async function collectDapodik(cfg, log = console.log) {
         } else failed.push({ npsn, alasan: "data kosong" });
       } catch (err) {
         if (err instanceof ServerTroubleError) {
+          // Daftar sekolah (tahap 1) sudah didapat. Berhenti mengambil detail, tetapi jangan membuang hasilnya.
           todo.slice(i).forEach((n) => failed.push({ npsn: n, alasan: "belum diambil (dihentikan)" }));
-          throw Object.assign(err, { partial: { details, failed, kecamatanCount, schoolsSeen: npsnList.size } });
+          stopped = err.message;
+          log(`  Tahap 2 dihentikan: ${err.message}`);
+          break;
         }
         failed.push({ npsn, alasan: err.message });
       }
-      if ((i + 1) % 10 === 0 || i + 1 === todo.length) log(`  ${i + 1}/${todo.length} (gagal: ${failed.length})`);
+      if ((i + 1) % 10 === 0 || i + 1 === todo.length) {
+        log(`  ${i + 1}/${todo.length} (gagal: ${failed.length})`);
+        onProgress({ stage: 2, done: i + 1, total: todo.length, failed: failed.length });
+      }
       await politeDelay();
     }
-    return { details, failed, kecamatanCount, schoolsSeen: npsnList.size };
+    const detailed = new Set(details.map((d) => String(d.npsn ?? "")));
+    const basics = [...npsnList.entries()].filter(([npsn]) => !detailed.has(npsn)).map(([, row]) => row);
+    return { details, basics, failed, kecamatanCount, schoolsSeen: npsnList.size, stopped };
   } finally {
     await browser.close().catch(() => {});
   }

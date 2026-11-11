@@ -34,6 +34,7 @@ export function startFakePortal({ perKecamatan = 3, behavior = {} } = {}) {
     }
     if (url.pathname === "/api/detail-sekolah") {
       const npsn = url.searchParams.get("npsn");
+      if (behavior.detailStatus) return json(behavior.detailStatus, { message: "error" });
       if (behavior.failNpsn === npsn) return json(429, { message: "too many" });
       const kec = kecamatan.find((k) => schoolsOf(k.kode_kecamatan).some((s) => s.npsn === npsn));
       const idx = Number(npsn.slice(-1));

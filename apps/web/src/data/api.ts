@@ -126,7 +126,7 @@ export interface SyncRun {
   id: string;
   source: string;
   scope: string;
-  status: "berjalan" | "selesai" | "gagal" | "ditolak";
+  status: "menunggu" | "berjalan" | "selesai" | "gagal" | "ditolak" | "dibatalkan";
   schoolsSeen: number;
   inserted: number;
   updated: number;
@@ -152,7 +152,9 @@ export const api = {
     revoke: (id: string) => request<{ ok: true }>(`/api/tokens/${id}`, { method: "DELETE" }),
   },
   sync: {
-    runs: (signal?: AbortSignal) => request<{ items: SyncRun[]; lastSuccess: SyncRun | null }>("/api/sync/runs", signal ? { signal } : {}),
+    runs: (signal?: AbortSignal) => request<{ items: SyncRun[]; lastSuccess: SyncRun | null; workerSeenAt: string | null }>("/api/sync/runs?source=dapodik", signal ? { signal } : {}),
+    request: () => request<SyncRun>("/api/sync/request", { method: "POST" }),
+    cancel: (id: string) => request<SyncRun>(`/api/sync/runs/${id}/cancel`, { method: "POST" }),
   },
   geocode: {
     status: (signal?: AbortSignal) => request<GeocodeStatus>("/api/geocode/status", signal ? { signal } : {}),

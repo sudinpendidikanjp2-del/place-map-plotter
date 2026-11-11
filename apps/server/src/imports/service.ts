@@ -170,7 +170,8 @@ export class ImportService {
             ${id}, ${userId}, ${userId}, case when lng is null then 'none' else 'import' end
           from uniq
           on conflict (npsn) where npsn is not null do update set
-            name = excluded.name, category = excluded.category, level = excluded.level, address = excluded.address,
+            name = excluded.name, category = excluded.category, level = coalesce(excluded.level, locations.level),
+            address = coalesce(nullif(excluded.address, ''), locations.address),
             description = coalesce(excluded.description, locations.description),
             founded_year = coalesce(excluded.founded_year, locations.founded_year),
             students = coalesce(excluded.students, locations.students), teachers = coalesce(excluded.teachers, locations.teachers),
