@@ -1,0 +1,26 @@
+{
+  "name": "peta-sekolah",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Peta data sekolah, fasilitas, dan aset pendidikan dengan penyimpanan bersama.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:server": "npm run dev -w @peta/server",
+    "dev:web": "npm run dev -w @peta/web",
+    "build": "npm run build -w @peta/web",
+    "typecheck": "tsc -p packages/domain && tsc -p apps/server && tsc -p apps/web",
+    "test": "npm test -w @peta/domain && npm test -w @peta/server",
+    "bench": "node scripts/bench.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "typescript": "~5.8.2"
+  }
+}

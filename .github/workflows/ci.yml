@@ -1,0 +1,47 @@
+name: CI
+
+# Dipakai langsung untuk pull request dan dipanggil oleh release.yml sebelum rilis.
+on:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Tes dan build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_USER: sekolah
+          POSTGRES_PASSWORD: dev
+          POSTGRES_DB: peta_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sekolah -d peta_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL_TEST: postgres://sekolah:dev@localhost:5432/peta_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Pemeriksaan tipe
+        run: npm run typecheck
+      - name: Tes unit dan integrasi
+        run: npm test
+      - name: Build web
+        run: npm run build
