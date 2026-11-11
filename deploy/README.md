@@ -38,6 +38,18 @@ Pengukuran di mesin 4 vCPU dan 16 GB pada 1 juta lokasi: 571 MB di disk (tabel d
 - Pemantauan dasar: `/api/health` mengembalikan 200 bila server dan basis data hidup. Pasang pemeriksa eksternal (mis. UptimeRobot) ke alamat itu.
 - Keamanan: `unattended-upgrades` aktif, login SSH hanya dengan kunci, PostgreSQL tidak membuka port ke luar.
 
+## Pra-agregasi cluster
+
+Peta tidak menghitung cluster dari jutaan baris. Tabel `cluster_cells` menyimpan jumlah dan jumlah koordinat per sel grid untuk zoom 0 sampai 14, per (jenis, kategori, provinsi). Pemicu PostgreSQL menjaganya tetap sinkron saat tambah, ubah, hapus, impor, dan `TRUNCATE`, sehingga hasilnya selalu sama dengan hitungan langsung (diuji).
+
+- Filter jenis, kategori, provinsi, dan area memakai tabel ini (sekitar 3 ms pada 1 juta lokasi). Filter kata kunci, kota, kecamatan, lingkaran, dan area gambar memakai kueri langsung. Zoom 15 ke atas selalu langsung karena areanya kecil.
+- Biayanya: impor sekitar 35% lebih lambat (setiap baris masuk ke 15 tingkat zoom) dan tabel tambahan sekitar 150 byte per sel. Pada 1 juta lokasi sintetis tabelnya 19 MB.
+- Bila dicurigai menyimpang (mis. setelah memulihkan cadangan sebagian atau mengubah tabel `locations` dengan `session_replication_role = replica`), bangun ulang:
+  ```bash
+  docker compose exec app npm run rebuild-cells -w @peta/server
+  ```
+- Mengubah rentang zoom berarti mengubah `generate_series` di migrasi 004 dan `CELL_MAX_ZOOM` di `repository.ts`, lalu membangun ulang.
+
 ## Jalur pertumbuhan
 
-Bila satu VPS tidak cukup: (1) naikkan RAM dan `shared_buffers`, (2) jalankan beberapa kontainer `app` di belakang Caddy (server tidak menyimpan state, versi data dibagi lewat PostgreSQL), (3) partisi tabel `locations`, (4) replika baca PostgreSQL, (5) pra-agregasi cluster per zoom atau tile vektor (`ST_AsMVT`).
+Bila satu VPS tidak cukup: (1) naikkan RAM dan `shared_buffers`, (2) jalankan beberapa kontainer `app` di belakang Caddy (server tidak menyimpan state, versi data dibagi lewat PostgreSQL), (3) partisi tabel `locations`, (4) replika baca PostgreSQL, (5) tile vektor (`ST_AsMVT`) bila pengiriman fitur menjadi batas.

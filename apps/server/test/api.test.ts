@@ -102,6 +102,39 @@ test("cache hasil tidak pernah basi: tambah, ubah, dan hapus langsung terlihat d
   assert.equal((await editor.json(q)).body.total, 0);
 });
 
+test("pra-agregasi cluster selalu sama dengan hitungan langsung setelah tambah, ubah, dan hapus", async () => {
+  const editor = await h.client("editor");
+  await h.sql`truncate locations restart identity cascade`;
+  await h.sql`
+    insert into locations (kind, name, category, province, geom)
+    select (array['sekolah','fasilitas','aset'])[1 + g % 3], 'L' || g, (array['SD','SMP','Gedung'])[1 + g % 3],
+      (array['Jawa Barat','Bali',null])[1 + g % 3], ST_SetSRID(ST_MakePoint(100 + random() * 40, -9 + random() * 14), 4326)
+    from generate_series(1, 1000) g`;
+  const bbox = { west: 94, south: -11, east: 141, north: 6 };
+  const same = async (f: Record<string, string>, label: string) => {
+    for (const zoom of [3, 6, 9, 12, 14]) {
+      // Tanpa area: sel yang menyentuh tepi area memang memuat titik di luar area, sehingga hanya perbandingan tanpa area yang tepat.
+      const filter = { ...f } as never;
+      const cells = (await h.app.repo.clustersFromCells(filter, zoom)).map((x) => `${x.count}|${x.lat.toFixed(5)}|${x.lng.toFixed(5)}`).sort();
+      const live = (await h.app.repo.clustersLive(filter, zoom)).map((x) => `${x.count}|${x.lat.toFixed(5)}|${x.lng.toFixed(5)}`).sort();
+      assert.deepEqual(cells, live, `${label} zoom ${zoom}`);
+    }
+  };
+  await same({}, "awal");
+  await same({ kind: "aset", province: "Bali" }, "filter jenis dan provinsi");
+  // pembaruan massal, perubahan koordinat lewat API, penghapusan, dan sisipan baru
+  await h.sql`update locations set category = 'Baru' where id % 7 = 0`;
+  await h.sql`update locations set geom = ST_SetSRID(ST_MakePoint(110, -7), 4326) where id % 11 = 0`;
+  await h.sql`delete from locations where id % 5 = 0`;
+  await editor.json("/api/locations", { method: "POST", json: sampleLocation({ latitude: -6.2, longitude: 106.8 }) });
+  await same({}, "setelah perubahan");
+  await same({ category: "Baru" }, "kategori hasil ubah massal");
+  // sel berisi satu lokasi membawa id dan nama
+  const singles = await h.app.repo.clustersFromCells({ bbox }, 14);
+  const one = singles.find((x) => x.count === 1);
+  assert.ok(one && one.id && one.name, "sel tunggal harus membawa id dan nama");
+});
+
 test("batas area mengikuti filter dan kosong bila tidak ada data", async () => {
   const admin = await h.client("admin");
   await h.sql`truncate locations restart identity cascade`;

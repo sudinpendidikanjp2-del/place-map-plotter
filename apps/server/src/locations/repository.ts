@@ -6,6 +6,8 @@ import { isEmptyFilter } from "./filter.ts";
 
 type Frag = postgres.PendingQuery<postgres.Row[]>;
 
+/** Zoom tertinggi yang punya pra-agregasi. Harus sama dengan generate_series di migrasi 004. */
+export const CELL_MAX_ZOOM = 14;
 const MAX_BULK_IDS = 10_000;
 const MAX_CLUSTER_FEATURES = 1500;
 const TOTAL_CAP = 100_000;
@@ -13,6 +15,11 @@ const SPATIAL_TOTAL_CAP = 10_000;
 
 /** Zoom ke atas ini tidak lagi dikelompokkan, titik ditampilkan satu per satu. */
 export const INDIVIDUAL_ZOOM = 17;
+
+/** Pra-agregasi mencakup jenis, kategori, dan provinsi pada zoom 0 sampai 14. Filter lain memakai kueri langsung. */
+export function canUseCells(f: LocationFilter, zoom: number): boolean {
+  return zoom <= CELL_MAX_ZOOM && !f.q && !f.city && !f.district && !f.circle && !f.polygon;
+}
 
 function escapeLike(s: string): string {
   return s.replace(/[\\%_]/g, "\\$&");
@@ -112,26 +119,67 @@ export class LocationRepository {
       };
     }
     return this.memo(`clusters|${zoom}|${JSON.stringify(q)}`, async () => {
-      const where = this.where(q);
-      let features: ClusterFeature[];
-      if (zoom >= INDIVIDUAL_ZOOM) {
-        features = await sql<ClusterFeature[]>`
-          select 1 as count, lat, lng, id::text as id, kind, name
-          from locations ${where} limit ${MAX_CLUSTER_FEATURES + 1}`;
-      } else {
-        features = await sql<ClusterFeature[]>`
-          select count(*)::int as count, avg(lat) as lat, avg(lng) as lng,
-            case when count(*) = 1 then min(id)::text end as id,
-            case when count(*) = 1 then min(kind) end as kind,
-            case when count(*) = 1 then min(name) end as name
-          from locations ${where}
-          group by floor(lng / ${cell}::float8), floor(lat / ${cell}::float8)
-          order by count(*) desc
-          limit ${MAX_CLUSTER_FEATURES + 1}`;
-      }
+      const features = canUseCells(q, zoom) ? await this.clustersFromCells(q, zoom, cell) : await this.clustersLive(q, zoom, cell);
       const truncated = features.length > MAX_CLUSTER_FEATURES;
-      if (truncated) features = features.slice(0, MAX_CLUSTER_FEATURES);
-      return { features, total: features.reduce((n, x) => n + x.count, 0), truncated };
+      const out = truncated ? features.slice(0, MAX_CLUSTER_FEATURES) : features;
+      return { features: out, total: out.reduce((n, x) => n + x.count, 0), truncated };
+    });
+  }
+
+  /** Kueri langsung ke tabel lokasi. Dipakai untuk zoom dekat dan filter yang tidak tercakup pra-agregasi. */
+  async clustersLive(f: LocationFilter, zoom: number, cell = 84.375 / 2 ** zoom): Promise<ClusterFeature[]> {
+    const sql = this.sql;
+    const where = this.where(f);
+    if (zoom >= INDIVIDUAL_ZOOM) {
+      return sql<ClusterFeature[]>`
+        select 1 as count, lat, lng, id::text as id, kind, name
+        from locations ${where} limit ${MAX_CLUSTER_FEATURES + 1}`;
+    }
+    return sql<ClusterFeature[]>`
+      select count(*)::int as count, avg(lat) as lat, avg(lng) as lng,
+        case when count(*) = 1 then min(id)::text end as id,
+        case when count(*) = 1 then min(kind) end as kind,
+        case when count(*) = 1 then min(name) end as name
+      from locations ${where}
+      group by floor(lng / ${cell}::float8), floor(lat / ${cell}::float8)
+      order by count(*) desc
+      limit ${MAX_CLUSTER_FEATURES + 1}`;
+  }
+
+  /** Membaca sel yang sudah dijumlahkan, sehingga biayanya mengikuti jumlah sel, bukan jumlah lokasi. */
+  async clustersFromCells(f: LocationFilter, zoom: number, cell = 84.375 / 2 ** zoom): Promise<ClusterFeature[]> {
+    const sql = this.sql;
+    const c: Frag[] = [sql`z = ${zoom}`];
+    if (f.bbox) {
+      c.push(sql`cx between ${Math.floor(f.bbox.west / cell)} and ${Math.floor(f.bbox.east / cell)}`);
+      c.push(sql`cy between ${Math.floor(f.bbox.south / cell)} and ${Math.floor(f.bbox.north / cell)}`);
+    }
+    if (f.kind) c.push(sql`kind = ${f.kind}`);
+    if (f.category) c.push(sql`category = ${f.category}`);
+    if (f.province) c.push(sql`province = ${f.province}`);
+    const where = c.reduce((a, b) => sql`${a} and ${b}`);
+    const rows = await sql<ClusterFeature[]>`
+      select sum(n)::int as count, sum(sum_lat) / sum(n) as lat, sum(sum_lng) / sum(n) as lng
+      from cluster_cells where ${where}
+      group by cx, cy
+      having sum(n) > 0
+      order by sum(n) desc
+      limit ${MAX_CLUSTER_FEATURES + 1}`;
+    const singles = rows.filter((r) => r.count === 1);
+    if (singles.length === 0) return rows.map((r) => ({ ...r, id: null, kind: null, name: null }));
+    // Sel berisi satu lokasi: ambil id, jenis, dan nama lewat indeks GiST dalam satu kueri.
+    const found = await sql<{ x: number; y: number; id: string; kind: ClusterFeature["kind"]; name: string }[]>`
+      select t.x, t.y, l.id::text as id, l.kind, l.name
+      from unnest(${singles.map((r) => r.lng)}::float8[], ${singles.map((r) => r.lat)}::float8[]) as t(x, y)
+      join lateral (
+        select id, kind, name from locations
+        where geom && ST_MakeEnvelope(t.x - 0.000001, t.y - 0.000001, t.x + 0.000001, t.y + 0.000001, 4326)
+        limit 1
+      ) l on true`;
+    const byPos = new Map(found.map((r) => [`${r.x}|${r.y}`, r]));
+    return rows.map((r) => {
+      const hit = r.count === 1 ? byPos.get(`${r.lng}|${r.lat}`) : undefined;
+      return { count: r.count, lat: r.lat, lng: r.lng, id: hit?.id ?? null, kind: hit?.kind ?? null, name: hit?.name ?? null };
     });
   }
 

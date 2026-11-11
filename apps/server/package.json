@@ -8,7 +8,8 @@
     "start": "node --env-file-if-exists=.env src/main.ts",
     "migrate": "node --env-file-if-exists=.env src/db/migrate-cli.ts",
     "create-admin": "node --env-file-if-exists=.env src/auth/create-admin-cli.ts",
-    "test": "node --test --test-concurrency=1 test/*.test.ts"
+    "test": "node --test --test-concurrency=1 test/*.test.ts",
+    "rebuild-cells": "node --env-file-if-exists=.env src/db/rebuild-cells-cli.ts"
   },
   "dependencies": {
     "@peta/domain": "*",
