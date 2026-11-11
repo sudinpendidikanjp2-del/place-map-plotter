@@ -71,16 +71,3 @@ export function parseFilter(q: URLSearchParams): LocationFilter {
 export function isEmptyFilter(f: LocationFilter): boolean {
   return Object.keys(f).length === 0;
 }
-
-export function filterToQuery(f: LocationFilter): URLSearchParams {
-  const q = new URLSearchParams();
-  if (f.kind) q.set("kind", f.kind);
-  if (f.category) q.set("category", f.category);
-  if (f.province) q.set("province", f.province);
-  if (f.city) q.set("city", f.city);
-  if (f.district) q.set("district", f.district);
-  if (f.q) q.set("q", f.q);
-  if (f.circle) q.set("circle", `${f.circle.lat},${f.circle.lng},${f.circle.radiusM}`);
-  if (f.polygon) q.set("polygon", f.polygon.map((p) => p.join(",")).join(";"));
-  return q;
-}

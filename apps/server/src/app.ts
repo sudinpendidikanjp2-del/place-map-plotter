@@ -174,6 +174,8 @@ export function createApp(config: Config, sql: Sql, opts: { trustProxy?: boolean
     sendJson(c.res, 200, await repo.clusters(filter, zoom), { "cache-control": "private, max-age=15" });
   });
 
+  router.get("/api/locations/extent", "viewer", async (c) => sendJson(c.res, 200, await repo.extent(parseFilter(c.url.searchParams)), { "cache-control": "private, max-age=15" }));
+
   router.get("/api/locations/facets", "viewer", async (c) => {
     const q = c.url.searchParams;
     const scope: { province?: string; city?: string } = {};

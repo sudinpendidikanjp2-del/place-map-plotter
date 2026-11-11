@@ -78,13 +78,26 @@ test("cluster: jumlah fitur dibatasi dan total tetap sama, zoom dekat menampilka
   const low = await admin.json(`/api/locations/clusters?${q}&zoom=4`);
   assert.equal(low.status, 200);
   assert.equal(low.body.total, 5000);
-  assert.ok(low.body.features.length < 5000 && low.body.features.length > 1);
+  assert.ok(low.body.features.length <= 1500 && low.body.features.length > 1);
   const filtered = await admin.json(`/api/locations/clusters?${q}&zoom=4&category=SD`);
   assert.equal(filtered.body.total, 2500);
   const near = await admin.json(`/api/locations/clusters?west=94&south=-11&east=95.5&north=6&zoom=18`);
   assert.ok(near.body.features.every((f: { count: number }) => f.count === 1));
   const bad = await admin.json(`/api/locations/clusters?zoom=4`);
   assert.equal(bad.status, 400);
+});
+
+test("batas area mengikuti filter dan kosong bila tidak ada data", async () => {
+  const admin = await h.client("admin");
+  await h.sql`truncate locations restart identity cascade`;
+  assert.deepEqual((await admin.json("/api/locations/extent")).body, { count: 0, bbox: null });
+  await h.sql`
+    insert into locations (kind, name, category, geom) values
+    ('sekolah', 'A', 'SD', ST_SetSRID(ST_MakePoint(100, -1), 4326)),
+    ('aset', 'B', 'Tanah', ST_SetSRID(ST_MakePoint(120, 5), 4326))`;
+  const all = (await admin.json("/api/locations/extent")).body;
+  assert.deepEqual(all, { count: 2, bbox: { west: 100, south: -1, east: 120, north: 5 } });
+  assert.equal((await admin.json("/api/locations/extent?kind=aset")).body.count, 1);
 });
 
 test("filter lingkaran dan poligon memakai PostGIS", async () => {

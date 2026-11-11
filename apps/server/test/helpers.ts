@@ -42,7 +42,7 @@ export async function start(): Promise<Harness> {
         headers.set("content-type", "application/json");
         body = JSON.stringify(init.json);
       }
-      return fetch(base + path, { ...init, headers, body: body as BodyInit | null | undefined });
+      return fetch(base + path, { ...init, headers, body: body as RequestInit["body"] });
     };
     return {
       fetch: doFetch,

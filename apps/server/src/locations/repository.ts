@@ -7,7 +7,7 @@ import { isEmptyFilter } from "./filter.ts";
 type Frag = postgres.PendingQuery<postgres.Row[]>;
 
 const MAX_BULK_IDS = 10_000;
-const MAX_CLUSTER_FEATURES = 3000;
+const MAX_CLUSTER_FEATURES = 1500;
 const TOTAL_CAP = 100_000;
 
 /** Zoom ke atas ini tidak lagi dikelompokkan, titik ditampilkan satu per satu. */
@@ -95,6 +95,16 @@ export class LocationRepository {
     if (truncated) features = features.slice(0, MAX_CLUSTER_FEATURES);
     const total = features.reduce((n, x) => n + x.count, 0);
     return { features, total, truncated };
+  }
+
+  /** Batas area semua lokasi yang sesuai filter, dipakai web untuk menyesuaikan tampilan peta. */
+  async extent(f: LocationFilter): Promise<{ count: number; bbox: { west: number; south: number; east: number; north: number } | null }> {
+    const rows = await this.sql<{ count: number; west: number | null; south: number | null; east: number | null; north: number | null }[]>`
+      select count(*)::int as count, min(ST_X(geom)) as west, min(ST_Y(geom)) as south, max(ST_X(geom)) as east, max(ST_Y(geom)) as north
+      from locations ${this.where(f)}`;
+    const r = rows[0]!;
+    if (r.count === 0 || r.west === null || r.south === null || r.east === null || r.north === null) return { count: 0, bbox: null };
+    return { count: r.count, bbox: { west: r.west, south: r.south, east: r.east, north: r.north } };
   }
 
   async list(
