@@ -72,7 +72,7 @@ const pick = (row, names) => {
 };
 
 /** Mengubah satu respons detail sekolah menjadi satu baris CSV. Mengembalikan null bila tidak ada NPSN atau nama. */
-export function mapSchool(row) {
+export function mapSchool(row, { basic = false } = {}) {
   const npsn = String(pick(row, KEYS.npsn)).trim();
   const nama = String(pick(row, KEYS.nama)).trim();
   if (!/^\d{8}$/.test(npsn) || !nama) return null;
@@ -98,7 +98,7 @@ export function mapSchool(row) {
     "Tahun Berdiri": yearOf(pick(row, KEYS.tglPendirian)),
     "Jumlah PD": toInt(pick(row, KEYS.pd)),
     "Jumlah Guru": toInt(pick(row, KEYS.guru)),
-    "Catatan Koordinat": coords ? "" : had ? `Koordinat Dapodik tidak valid (${rawLat} & ${rawLng}), dicari ulang` : "Dapodik tidak memuat koordinat",
+    "Catatan Koordinat": coords ? "" : basic ? "Detail Dapodik belum terambil, koordinat menyusul" : had ? `Koordinat Dapodik tidak valid (${rawLat} & ${rawLng}), dicari ulang` : "Dapodik tidak memuat koordinat",
     "Kepala Sekolah": text("nama_kepsek"),
     "Status Kepemilikan": text("status_kepemilikan"),
     Akreditasi: String(pick(row, KEYS.akreditasi)).trim(),

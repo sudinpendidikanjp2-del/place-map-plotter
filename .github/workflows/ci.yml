@@ -48,21 +48,17 @@ jobs:
 
   sync-worker:
     name: Pekerja sinkronisasi
-    # Playwright hanya mendukung rilis Ubuntu tertentu. ubuntu-latest sudah 26.04, yang belum didukung.
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # Image resmi Playwright sudah berisi Chromium dan dependensinya, jadi tidak ada apt-get yang bergantung pada mirror runner.
+    # Versinya harus sama dengan paket di apps/sync/package.json dan Dockerfile.
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: apps/sync/package-lock.json
-      - name: Pasang dependensi dan Chromium
+      - name: Pasang dependensi
         working-directory: apps/sync
-        run: |
-          npm ci
-          npx playwright install --with-deps chromium
+        run: npm ci
       - name: Tes pekerja
         working-directory: apps/sync
         run: npm test

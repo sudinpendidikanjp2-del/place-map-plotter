@@ -9,6 +9,7 @@ import { COLUMNS, latestDetail, mapSchool } from "../src/mapper.mjs";
 import { toCsv } from "../src/csv.mjs";
 import { checkAgainstPrevious } from "../src/guard.mjs";
 import { collectDapodik, ServerTroubleError } from "../src/dapodik.mjs";
+import { buildRows } from "../src/job.mjs";
 import { startFakePortal } from "./fake-portal.mjs";
 
 let hasPlaywright = true;
@@ -177,4 +178,27 @@ test("daftar sekolah bertingkat halaman gagal dengan jelas, bukan terpotong diam
     await portal.close();
   }
   void readFileSync;
+});
+
+test("tahap 2 yang terus gagal (HTTP 500) tidak membuang hasil tahap 1: sekolah masuk dengan data dasar", { skip: !hasPlaywright && "Playwright tidak terpasang" }, async () => {
+  const portal = await startFakePortal({ perKecamatan: 3, behavior: { detailStatus: 500 } });
+  const dir = mkdtempSync(join(tmpdir(), "sync-cache-"));
+  try {
+    const r = await collectDapodik(fast(portal.url, dir, { maxConsecutiveFail: 2 }), () => {});
+    assert.equal(r.details.length, 0);
+    assert.equal(r.basics.length, 6);
+    assert.match(r.stopped, /gagal beruntun/);
+    const built = buildRows(r, { provinsi: "Prov. D.K.I. Jakarta", kabupaten: "Kota Adm. Jakarta Pusat" });
+    assert.equal(built.rows.length, 6);
+    assert.equal(built.basic.length, 6);
+    const row = built.rows[0];
+    assert.equal(row.Kecamatan, "Senen");
+    assert.equal(row["Kabupaten/Kota"], "Kota Jakarta Pusat");
+    assert.equal(row.Provinsi, "DKI Jakarta");
+    assert.equal(row.Lintang, "");
+    assert.match(row["Catatan Koordinat"], /belum terambil/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    await portal.close();
+  }
 });

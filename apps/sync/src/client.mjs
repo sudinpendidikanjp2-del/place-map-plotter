@@ -28,6 +28,9 @@ export class PetaClient {
   startRun(source, scope) {
     return this.#request("/api/sync/runs", { method: "POST", json: { source, scope } });
   }
+  claim(source, scope) {
+    return this.#request("/api/sync/claim", { method: "POST", json: { source, scope } });
+  }
   finishRun(id, result) {
     return this.#request(`/api/sync/runs/${id}`, { method: "PATCH", json: result });
   }

@@ -184,3 +184,44 @@ test("token API: boleh untuk impor dan sinkronisasi saja, bisa dicabut, tanpa co
   await admin.json(`/api/tokens/${made.id}`, { method: "DELETE" });
   assert.equal((await raw("/api/sync/runs")).status, 401, "token yang dicabut ditolak");
 });
+
+test("sinkronisasi dari web: permintaan menunggu, diambil pekerja, tidak ganda, bisa dibatalkan", async () => {
+  const admin = await h.client("admin");
+  const editor = await h.client("editor");
+  await h.sql`truncate sync_runs, sync_workers restart identity`;
+  const made = (await admin.json("/api/tokens", { method: "POST", json: { name: "Pekerja antrean" } })).body as { token: string };
+  const worker = (path: string, body: unknown = {}) => fetch(h.base + path, { method: "POST", headers: { authorization: `Bearer ${made.token}`, "content-type": "application/json" }, body: JSON.stringify(body) });
+
+  assert.equal((await editor.json("/api/sync/request", { method: "POST" })).status, 403, "hanya admin yang boleh meminta");
+  assert.equal(((await (await worker("/api/sync/claim", { source: "dapodik" })).json()) as { run: unknown }).run, null, "belum ada permintaan");
+
+  const req = await admin.json("/api/sync/request", { method: "POST" });
+  assert.equal(req.status, 201);
+  assert.equal(req.body.status, "menunggu");
+  assert.equal((await admin.json("/api/sync/request", { method: "POST" })).status, 409, "tidak boleh ganda");
+
+  const claimed = (await (await worker("/api/sync/claim", { source: "dapodik", scope: "Jakarta Pusat" })).json()) as { run: { id: string; status: string; scope: string } };
+  assert.equal(claimed.run.id, req.body.id);
+  assert.equal(claimed.run.status, "berjalan");
+  assert.equal(claimed.run.scope, "Jakarta Pusat");
+  assert.equal(((await (await worker("/api/sync/claim", { source: "dapodik" })).json()) as { run: unknown }).run, null, "satu permintaan hanya diambil sekali");
+  assert.equal((await admin.json("/api/sync/request", { method: "POST" })).status, 409, "masih berjalan");
+
+  const list = (await admin.json("/api/sync/runs?source=dapodik")).body as { workerSeenAt: string | null };
+  assert.ok(list.workerSeenAt, "denyut pekerja tercatat");
+
+  await h.sql`update sync_runs set status = 'selesai', finished_at = now()`;
+  const second = await admin.json("/api/sync/request", { method: "POST" });
+  assert.equal(second.status, 201);
+  assert.equal((await admin.json(`/api/sync/runs/${second.body.id}/cancel`, { method: "POST" })).body.status, "dibatalkan");
+  assert.equal((await admin.json(`/api/sync/runs/${second.body.id}/cancel`, { method: "POST" })).status, 409);
+});
+
+test("impor ulang tanpa alamat atau jenjang tidak menghapus yang sudah ada", async () => {
+  const editor = await h.client("editor");
+  await h.sql`truncate locations, import_batches restart identity cascade`;
+  await importCsv(editor, "NPSN,Nama,Jenjang,Alamat,Kecamatan,Kabupaten,Provinsi,PD,Jumlah Guru\n30000009,SDN Lengkap,SD,Jl. Asli 1,Senen,Kota Jakarta Pusat,DKI Jakarta,250,10");
+  await importCsv(editor, "NPSN,Nama,Jenjang,Alamat,Kecamatan,Kabupaten,Provinsi,PD,Jumlah Guru\n30000009,SDN Lengkap,,,Senen,Kota Jakarta Pusat,DKI Jakarta,,");
+  const r = (await h.sql`select address, level, students, teachers from locations where npsn = '30000009'`)[0]!;
+  assert.deepEqual([r.address, r.level, r.students, r.teachers], ["Jl. Asli 1", "SD", 250, 10]);
+});

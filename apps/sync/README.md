@@ -41,7 +41,20 @@ Pengaturan (variabel lingkungan): `DAPODIK_KODE_PROVINSI` (010000), `DAPODIK_KOD
 
 Kapasitas: sekitar 650 sekolah per jam. Seluruh Indonesia tidak mungkin dengan cara ini.
 
-## Terjadwal di VPS
+## Dari web, tanpa terminal
+
+Jalankan pekerja sebagai layanan tetap (mode `--daemon`). Pekerja mengecek server tiap 30 detik, lalu admin cukup menekan **Sinkronkan sekarang** di layar Sinkronisasi. Kemajuan tampil langsung di riwayat, dan layar itu menunjukkan apakah pekerja terhubung. Tanpa permintaan, pekerja tetap menarik sendiri tiap `SYNC_EVERY_HOURS` jam (bawaan 168 = mingguan, `0` = hanya dari tombol).
+
+```bash
+# sekali saja: buat token di layar Sinkronisasi, isi PETA_TOKEN di deploy/.env, lalu
+docker compose --profile sync up -d sync
+```
+
+## Bila tahap 2 (detail) terus gagal
+
+Daftar sekolah per kecamatan (tahap 1) sudah memuat NPSN dan nama. Bila detail tiap sekolah (tahap 2) berhenti di tengah jalan (mis. HTTP 500 beruntun), pekerja **tidak membuang hasilnya**: sekolah yang detailnya belum terambil tetap diimpor dengan data dasar (NPSN, nama, jenjang bila ada, wilayah). Impor tidak menimpa alamat, jenjang, jumlah murid/guru, atau koordinat yang sudah ada dengan nilai kosong. Detail yang sudah terambil disimpan di cache, jadi penarikan berikutnya melanjutkan dari sana. Eksekusinya tetap berstatus selesai dengan catatan jumlah sekolah yang hanya berdata dasar. Penolakan 401/403 juga menghentikan tahap 2 saja dan tidak dilewati.
+
+## Terjadwal di VPS (alternatif tanpa daemon)
 
 ```bash
 # crontab, setiap Minggu pukul 01.15

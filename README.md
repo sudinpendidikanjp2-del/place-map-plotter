@@ -51,6 +51,8 @@ Portal Dapodik baru (dapo.kemendikdasmen.go.id) tidak menyediakan API publik tan
 
 ## Prasyarat Google Cloud
 
+Dua kunci itu **berbeda** dan sebaiknya tidak digabung. Kunci web terlihat oleh siapa pun yang membuka situs (hanya bisa dibatasi domain), sedangkan kunci server tersimpan rahasia di VPS (bisa dibatasi IP). Cara membuatnya: Google Cloud Console → pilih/buat project → aktifkan penagihan → *APIs & Services → Library* untuk mengaktifkan API → *Credentials → Create credentials → API key* → *Restrict key*.
+
 1. **Kunci web** (Maps JavaScript API, Places jika dipakai, Directions API): batasi *HTTP referrers* ke domain Anda.
 2. **ID peta** (Map Management) dengan gaya diredam, lalu isi `GOOGLE_MAP_ID`. `AdvancedMarker` mensyaratkannya.
 3. **Kunci server** (Static Maps API untuk ekspor gambar peta, dan Places API (New) untuk mencari titik dari nama tempat): batasi *IP addresses* ke IP VPS, isi `GOOGLE_SERVER_KEY`. `STATIC_MAPS_KEY` lama tetap dibaca.
