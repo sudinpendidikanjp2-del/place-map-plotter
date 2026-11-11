@@ -38,7 +38,7 @@ export function startFakePortal({ perKecamatan = 3, behavior = {} } = {}) {
       const kec = kecamatan.find((k) => schoolsOf(k.kode_kecamatan).some((s) => s.npsn === npsn));
       const idx = Number(npsn.slice(-1));
       return json(200, { data: [
-        { npsn, nama: `SD UJI ${npsn}`, bentuk_pendidikan: idx % 2 ? "SD" : "SMP", status_sekolah: "Negeri", alamat_jalan: "Jl. Uji No. 1", kecamatan: kec?.kecamatan ?? "Kec. Senen", kabupaten: "Kota Adm. Jakarta Pusat", provinsi: "Prov. D.K.I. Jakarta", pd: 100 * idx, jum_guru: 5 + idx, jum_tendik: 2, rombel: 4, semester: "20251" },
+        { npsn, nama: `SD UJI ${npsn}`, bentuk_pendidikan: idx % 2 ? "SD" : "SMP", status_sekolah: "Negeri", alamat_jalan: "Jl. Uji No. 1", lintang: idx === 2 ? 0 : idx === 4 ? 40.7 : -6.17 - idx * 0.001, bujur: idx === 2 ? 0 : idx === 4 ? -74 : 106.84 + idx * 0.001, tlg_sk_pendirian_sekolah: "1990-05-01", nama_kepsek: "Kepala Uji", jum_ptk: 20, ruang_kelas: 12, kelas_berat: 1, semester: "20251", kecamatan: kec?.kecamatan ?? "Kec. Senen", kabupaten: "Kota Adm. Jakarta Pusat", provinsi: "Prov. D.K.I. Jakarta", pd: 100 * idx, jum_guru: 5 + idx, jum_tendik: 2, rombel: 4 },
         { npsn, nama: `SD UJI ${npsn}`, bentuk_pendidikan: "SD", semester: "20242", rombel: 0 },
       ] });
     }

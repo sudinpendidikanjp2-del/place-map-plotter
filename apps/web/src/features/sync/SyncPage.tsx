@@ -101,7 +101,7 @@ function Geocode() {
   return (
     <section aria-label="Koordinat otomatis" className="rounded-card border border-line bg-surface p-4">
       <h2 className="font-semibold">Pencarian koordinat otomatis</h2>
-      <p className="mt-1 text-ink-2">Sekolah dari Dapodik tidak membawa koordinat. Titiknya dicari lewat Google Places dari nama dan wilayah, ditandai perkiraan, dan baru dianggap benar setelah diperiksa. Setiap pencarian memakai kuota Google berbayar.</p>
+      <p className="mt-1 text-ink-2">Koordinat sekolah diambil dari Dapodik. Yang kosong atau tidak valid (nol, di luar Indonesia) dicari lewat Google Places dari nama dan wilayah, ditandai perkiraan, dan baru dianggap benar setelah diperiksa. Setiap pencarian memakai kuota Google berbayar.</p>
       {status.status === "error" && <ErrorState error={status.error} onRetry={status.reload} />}
       {st && (
         <>

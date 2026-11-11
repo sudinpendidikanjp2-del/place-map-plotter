@@ -56,3 +56,23 @@ export function toInt(v) {
   const n = Number(String(v).replace(/[.\s]/g, "").replace(",", "."));
   return Number.isFinite(n) && n >= 0 ? String(Math.round(n)) : "";
 }
+
+/**
+ * Koordinat dari Dapodik. Aturan validnya sama dengan yang dipakai portal sendiri: bukan kosong, bukan nol, dan di dalam
+ * Indonesia (lintang -11 sampai 6, bujur 95 sampai 141). Yang tidak valid dikembalikan sebagai null agar dicari ulang,
+ * bukan dipercaya.
+ */
+export function validCoordinates(lintang, bujur) {
+  if (lintang === null || lintang === undefined || lintang === "" || bujur === null || bujur === undefined || bujur === "") return null;
+  const lat = Number(String(lintang).replace(",", "."));
+  const lng = Number(String(bujur).replace(",", "."));
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat === 0 || lng === 0) return null;
+  if (lat < -11 || lat > 6 || lng < 95 || lng > 141) return null;
+  return { lat, lng };
+}
+
+/** "2004-07-14" menjadi "2004". */
+export function yearOf(date) {
+  const m = /^(\d{4})-\d{2}-\d{2}/.exec(String(date ?? "").trim());
+  return m ? m[1] : "";
+}

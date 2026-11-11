@@ -47,8 +47,13 @@ Kolom lain (mis. Status Sekolah, Akreditasi) disimpan sebagai data tambahan. Kol
 
 ## Koordinat
 
-Data Dapodik (detail sekolah) tidak memuat lintang dan bujur. Karena itu:
-- Sekolah dari sinkronisasi masuk **tanpa koordinat** (lokasi boleh belum bertitik) dan tidak tampil di peta sampai punya titik.
-- Layar Sinkronisasi mencari titiknya lewat Google Places dari nama dan wilayah, dibatasi kuota harian (`GEOCODE_DAILY_LIMIT`, bawaan 500). Hasil ditolak bila di luar Indonesia atau alamatnya tidak memuat nama kota yang sama.
-- Titik hasil pencarian ditandai **perkiraan** di peta dan daftar, dan baru dianggap benar setelah ada yang menekan "Tandai sudah benar". Titik yang diperbaiki manual tidak pernah ditimpa oleh sinkronisasi berikutnya.
+Respons `detail-sekolah` **memuat `lintang` dan `bujur`** (dikonfirmasi dari halaman Dapodik yang disimpan pengguna: SMKN 1 Mas Ubud, NPSN 20110502, -8.5416 & 115.2697, dan dari bundel portal). Riset awal di atas keliru menyatakan sebaliknya. Karena itu:
+- Pekerja mengambil koordinat langsung dan mengimpornya (sumber `import`), jadi sekolah langsung tampil di peta.
+- Koordinat dianggap tidak valid dengan aturan yang sama dengan portal sendiri: kosong, nol, atau di luar Indonesia (lintang -11 sampai 6, bujur 95 sampai 141). Lintang dan bujur yang tertukar juga jatuh ke aturan ini. Sekolah itu masuk tanpa koordinat dengan catatan "Koordinat Dapodik tidak valid", bukan dengan titik yang salah.
+- Yang tanpa koordinat dicari lewat layar Sinkronisasi (Google Places) dari nama dan wilayah, dibatasi kuota harian (`GEOCODE_DAILY_LIMIT`, bawaan 500). Hasil ditolak bila di luar Indonesia atau alamatnya tidak memuat nama kota yang sama. Titiknya ditandai **perkiraan** sampai ada yang menekan "Tandai sudah benar".
+- Titik yang diperbaiki manual tidak pernah ditimpa oleh sinkronisasi berikutnya.
 - Pencarian otomatis berkala bisa dinyalakan dengan `GEOCODE_AUTO=true`. Bawaannya mati agar biaya tidak mengejutkan.
+
+## Cara halaman detail diambil
+
+Halaman `/sekolah?npsn=...` memanggil `/api/detail-sekolah?npsn=...` dengan header `Authorization` yang disiapkan portal. Pekerja membuka halamannya dan menangkap respons itu (tidak memanggil URL API langsung), jadi tidak perlu membaca atau memakai ulang token.

@@ -76,6 +76,7 @@ Pengujian: 11 tes domain dan 26 tes server lulus (termasuk impor gaya Dapodik, u
 - Lokasi boleh belum punya koordinat (`geom` boleh kosong, kolom `coord_source`: manual, import, geocoded, none). Pra-agregasi hanya menghitung yang bertitik. Pencarian titik otomatis lewat Google Places dengan kuota harian dan penanda perkiraan.
 - Token API (hash saja yang disimpan, bisa dicabut) hanya berlaku untuk rute impor dan riwayat sinkronisasi, tanpa cookie dan tanpa pemeriksaan CSRF.
 - Riwayat sinkronisasi (`sync_runs`) dan layar Sinkronisasi dengan peringatan bila lebih dari 10 hari tanpa penarikan berhasil.
+- Koreksi: respons `detail-sekolah` Dapodik **memuat lintang dan bujur** (dikonfirmasi dari halaman yang disimpan pengguna). Pekerja mengimpornya langsung, dan hanya yang kosong atau tidak valid menurut aturan portal (nol, di luar Indonesia) dicari lewat Google Places.
 - `apps/sync`: pekerja Playwright (dari skrip pengguna) dengan normalisasi wilayah dan jenjang, cache, penjaga hasil menyimpang (tolak bila di bawah 70% penarikan sebelumnya), dan pelaporan. Diuji terhadap portal palsu dan terhadap server asli. **Belum dijalankan terhadap portal Dapodik asli.**
 - Pengujian: 32 tes server, 8 tes pekerja, dan skrip peramban `scripts/e2e/sinkronisasi.cjs` lulus.
 

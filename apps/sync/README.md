@@ -8,17 +8,21 @@ Menarik data satuan pendidikan dari portal Dapodik lewat otomasi peramban, menor
 2. Jeda acak 4 sampai 7 detik, satu tab, aset berat diblokir, cache tujuh hari (jalan ulang tidak mengulang yang sudah baru diambil), berhenti sendiri setelah gagal beruntun.
 3. Memetakan ke CSV berjudul kolom Dapodik: `Prov. D.K.I. Jakarta` menjadi `DKI Jakarta`, `Kota Adm. Jakarta Pusat` menjadi `Kota Jakarta Pusat`, `Kec. Senen` menjadi `Senen`, bentuk pendidikan menjadi jenjang baku.
 4. **Penjaga:** hasil ditolak (tidak diimpor) bila nol sekolah, atau kurang dari 70% jumlah penarikan berhasil sebelumnya. Sekolah yang hilang dari hasil tidak pernah dihapus.
-5. Mengimpor lewat endpoint impor yang sama dengan impor manual. NPSN yang sama memperbarui data lama. Sekolah baru masuk **tanpa koordinat**, dan titiknya dicari lewat layar Sinkronisasi.
+5. Mengimpor lewat endpoint impor yang sama dengan impor manual. NPSN yang sama memperbarui data lama. Koordinat (`lintang`, `bujur`) ikut diambil dari `detail-sekolah`. Yang kosong, nol, tertukar, atau di luar Indonesia (aturan yang sama dengan portal sendiri) tidak dipercaya: sekolahnya masuk tanpa koordinat dengan catatan, dan titiknya dicari lewat layar Sinkronisasi.
 6. Melaporkan setiap eksekusi (berhasil, gagal, ditolak) ke layar Sinkronisasi.
 
 ## Yang sengaja tidak dilakukan
 
 Tidak ada token portal yang dibaca atau dipakai ulang, tidak ada penyamaran peramban, dan tidak ada upaya melewati tantangan akses. Bila portal menjawab 401 atau 403, pekerja berhenti dan melapor. Itu tanda perlu memeriksa izin atau akun, bukan sesuatu yang diakali. Pastikan penarikan otomatis berkala sudah diizinkan oleh pemilik data.
 
+## Bidang yang dipetakan
+
+Dari respons `detail-sekolah` (nama bidang diambil dari halaman Dapodik dan bundel portal): identitas (`npsn`, `nama`, `bentuk_pendidikan`, `status_sekolah`, `nama_kepsek`, `status_kepemilikan`, `akreditasi`), wilayah (`provinsi`, `kabupaten`, `kecamatan`, `desa_kelurahan`, `alamat_jalan`, `kode_pos`, `rt`, `rw`), **`lintang`, `bujur`**, `tlg_sk_pendirian_sekolah` (tahun berdiri), jumlah (`pd`, `pd_l`, `pd_p`, `rombel`, `jum_guru`, `jum_ptk`, `jum_tendik`), sarana (`ruang_kelas`, `kelas_berat`, `perpus`, `lab_kom`, `wc_siswa`), dan listrik, internet, BOSP. Bidang selain murid, guru, tahun berdiri, dan wilayah disimpan sebagai data tambahan di tiap lokasi. Respons memuat satu catatan per semester, yang terbaru dipakai (semester dengan rombel 0 dilewati bila ada yang sebelumnya, sama seperti portal).
+
 ## Status pengujian
 
 Diuji terhadap **portal palsu** yang meniru alur halaman dan API, termasuk cache, kegagalan per sekolah, penolakan 403, dan daftar bertingkat halaman. **Belum pernah dijalankan terhadap portal Dapodik asli.** Dua hal perlu diperiksa pada jalan pertama:
-- Nama bidang pada respons `detail-sekolah` (`mapper.mjs` mencoba beberapa kandidat per bidang). Jalankan dengan `--dry` dan periksa CSV-nya.
+- CSV hasil `--dry`: periksa beberapa baris terhadap halaman `/sekolah?npsn=` yang sama.
 - Daftar sekolah per kecamatan yang bertingkat halaman: pengumpul **gagal dengan pesan jelas** (bukan terpotong diam-diam) bila respons menandakan lebih dari satu halaman, karena cara portal memuat halaman berikutnya belum diketahui.
 
 ## Menjalankan

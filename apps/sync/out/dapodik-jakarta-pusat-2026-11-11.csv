@@ -1,9 +1,9 @@
-﻿NPSN,Nama Satuan Pendidikan,Jenjang,Bentuk Pendidikan Asli,Status Sekolah,Alamat Jalan,Kelurahan,Kecamatan,Kabupaten/Kota,Provinsi,Jumlah PD,Jumlah PTK,Jumlah Tendik,Jumlah Rombel,Akreditasi,Sumber
-01000001,SD UJI 01000001,SD,SD,Negeri,Jl. Uji No. 1,,Senen,Kota Jakarta Pusat,DKI Jakarta,100,6,2,4,,Dapodik
-01000002,SD UJI 01000002,SMP,SMP,Negeri,Jl. Uji No. 1,,Senen,Kota Jakarta Pusat,DKI Jakarta,200,7,2,4,,Dapodik
-01000003,SD UJI 01000003,SD,SD,Negeri,Jl. Uji No. 1,,Senen,Kota Jakarta Pusat,DKI Jakarta,300,8,2,4,,Dapodik
-01000004,SD UJI 01000004,SMP,SMP,Negeri,Jl. Uji No. 1,,Senen,Kota Jakarta Pusat,DKI Jakarta,400,9,2,4,,Dapodik
-02000001,SD UJI 02000001,SD,SD,Negeri,Jl. Uji No. 1,,Kemayoran,Kota Jakarta Pusat,DKI Jakarta,100,6,2,4,,Dapodik
-02000002,SD UJI 02000002,SMP,SMP,Negeri,Jl. Uji No. 1,,Kemayoran,Kota Jakarta Pusat,DKI Jakarta,200,7,2,4,,Dapodik
-02000003,SD UJI 02000003,SD,SD,Negeri,Jl. Uji No. 1,,Kemayoran,Kota Jakarta Pusat,DKI Jakarta,300,8,2,4,,Dapodik
-02000004,SD UJI 02000004,SMP,SMP,Negeri,Jl. Uji No. 1,,Kemayoran,Kota Jakarta Pusat,DKI Jakarta,400,9,2,4,,Dapodik
+﻿NPSN,Nama Satuan Pendidikan,Jenjang,Bentuk Pendidikan Asli,Status Sekolah,Alamat Jalan,Kelurahan,Kecamatan,Kabupaten/Kota,Provinsi,Lintang,Bujur,Tahun Berdiri,Jumlah PD,Jumlah Guru,Catatan Koordinat,Kepala Sekolah,Status Kepemilikan,Akreditasi,Kode Pos,RT,RW,PD Laki-laki,PD Perempuan,Rombel,PTK Total,Tenaga Kependidikan,Ruang Kelas,Kelas Rusak Berat,Perpustakaan,Lab Komputer,Toilet Siswa,Sumber Listrik,Daya Listrik,Layanan Internet,Penyedia Internet,Bandwidth Internet,Partisipasi BOSP,Semester Data,Sumber
+01000001,SD UJI 01000001,SD,SD,Negeri,Jl. Uji No. 1,,Senen,Kota Jakarta Pusat,DKI Jakarta,-6.171,106.84100000000001,1990,100,6,,Kepala Uji,,,,,,,,4,20,2,12,1,,,,,,,,,,20251,Dapodik
+01000002,SD UJI 01000002,SMP,SMP,Negeri,Jl. Uji No. 1,,Senen,Kota Jakarta Pusat,DKI Jakarta,,,1990,200,7,"Koordinat Dapodik tidak valid (0 & 0), dicari ulang",Kepala Uji,,,,,,,,4,20,2,12,1,,,,,,,,,,20251,Dapodik
+01000003,SD UJI 01000003,SD,SD,Negeri,Jl. Uji No. 1,,Senen,Kota Jakarta Pusat,DKI Jakarta,-6.173,106.843,1990,300,8,,Kepala Uji,,,,,,,,4,20,2,12,1,,,,,,,,,,20251,Dapodik
+01000004,SD UJI 01000004,SMP,SMP,Negeri,Jl. Uji No. 1,,Senen,Kota Jakarta Pusat,DKI Jakarta,,,1990,400,9,"Koordinat Dapodik tidak valid (40.7 & -74), dicari ulang",Kepala Uji,,,,,,,,4,20,2,12,1,,,,,,,,,,20251,Dapodik
+02000001,SD UJI 02000001,SD,SD,Negeri,Jl. Uji No. 1,,Kemayoran,Kota Jakarta Pusat,DKI Jakarta,-6.171,106.84100000000001,1990,100,6,,Kepala Uji,,,,,,,,4,20,2,12,1,,,,,,,,,,20251,Dapodik
+02000002,SD UJI 02000002,SMP,SMP,Negeri,Jl. Uji No. 1,,Kemayoran,Kota Jakarta Pusat,DKI Jakarta,,,1990,200,7,"Koordinat Dapodik tidak valid (0 & 0), dicari ulang",Kepala Uji,,,,,,,,4,20,2,12,1,,,,,,,,,,20251,Dapodik
+02000003,SD UJI 02000003,SD,SD,Negeri,Jl. Uji No. 1,,Kemayoran,Kota Jakarta Pusat,DKI Jakarta,-6.173,106.843,1990,300,8,,Kepala Uji,,,,,,,,4,20,2,12,1,,,,,,,,,,20251,Dapodik
+02000004,SD UJI 02000004,SMP,SMP,Negeri,Jl. Uji No. 1,,Kemayoran,Kota Jakarta Pusat,DKI Jakarta,,,1990,400,9,"Koordinat Dapodik tidak valid (40.7 & -74), dicari ulang",Kepala Uji,,,,,,,,4,20,2,12,1,,,,,,,,,,20251,Dapodik

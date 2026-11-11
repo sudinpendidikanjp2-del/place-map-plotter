@@ -1,4 +1,4 @@
-import { normalizeCity, normalizeDistrict, normalizeLevel, normalizeProvince, toInt } from "./normalize.mjs";
+import { normalizeCity, normalizeDistrict, normalizeLevel, normalizeProvince, toInt, validCoordinates, yearOf } from "./normalize.mjs";
 
 /** Kolom CSV hasil. Judulnya dikenali otomatis oleh impor Peta Sekolah (lihat docs/DAPODIK.md). */
 export const COLUMNS = [
@@ -12,11 +12,36 @@ export const COLUMNS = [
   "Kecamatan",
   "Kabupaten/Kota",
   "Provinsi",
+  "Lintang",
+  "Bujur",
+  "Tahun Berdiri",
   "Jumlah PD",
-  "Jumlah PTK",
-  "Jumlah Tendik",
-  "Jumlah Rombel",
+  "Jumlah Guru",
+  // Kolom di bawah ini disimpan sebagai data tambahan pada tiap lokasi.
+  "Catatan Koordinat",
+  "Kepala Sekolah",
+  "Status Kepemilikan",
   "Akreditasi",
+  "Kode Pos",
+  "RT",
+  "RW",
+  "PD Laki-laki",
+  "PD Perempuan",
+  "Rombel",
+  "PTK Total",
+  "Tenaga Kependidikan",
+  "Ruang Kelas",
+  "Kelas Rusak Berat",
+  "Perpustakaan",
+  "Lab Komputer",
+  "Toilet Siswa",
+  "Sumber Listrik",
+  "Daya Listrik",
+  "Layanan Internet",
+  "Penyedia Internet",
+  "Bandwidth Internet",
+  "Partisipasi BOSP",
+  "Semester Data",
   "Sumber",
 ];
 
@@ -32,10 +57,13 @@ const KEYS = {
   kabupaten: ["kabupaten", "kabupaten_kota", "kota"],
   provinsi: ["provinsi"],
   pd: ["pd", "jumlah_pd", "jum_pd", "peserta_didik"],
-  guru: ["jum_guru", "jumlah_guru", "guru", "jum_ptk"],
+  guru: ["jum_guru", "jumlah_guru", "guru"],
   tendik: ["jum_tendik", "jumlah_tendik", "tendik"],
   rombel: ["rombel", "jum_rombel"],
   akreditasi: ["akreditasi"],
+  lintang: ["lintang", "latitude", "lat"],
+  bujur: ["bujur", "longitude", "lng", "lon"],
+  tglPendirian: ["tlg_sk_pendirian_sekolah", "tgl_sk_pendirian_sekolah"],
 };
 
 const pick = (row, names) => {
@@ -49,6 +77,11 @@ export function mapSchool(row) {
   const nama = String(pick(row, KEYS.nama)).trim();
   if (!/^\d{8}$/.test(npsn) || !nama) return null;
   const bentuk = String(pick(row, KEYS.bentuk)).trim();
+  const rawLat = pick(row, KEYS.lintang);
+  const rawLng = pick(row, KEYS.bujur);
+  const coords = validCoordinates(rawLat, rawLng);
+  const had = rawLat !== "" || rawLng !== "";
+  const text = (k) => String(row[k] ?? "").trim();
   return {
     NPSN: npsn,
     "Nama Satuan Pendidikan": nama,
@@ -60,11 +93,35 @@ export function mapSchool(row) {
     Kecamatan: normalizeDistrict(pick(row, KEYS.kecamatan)) ?? "",
     "Kabupaten/Kota": normalizeCity(pick(row, KEYS.kabupaten)) ?? "",
     Provinsi: normalizeProvince(pick(row, KEYS.provinsi)) ?? "",
+    Lintang: coords ? String(coords.lat) : "",
+    Bujur: coords ? String(coords.lng) : "",
+    "Tahun Berdiri": yearOf(pick(row, KEYS.tglPendirian)),
     "Jumlah PD": toInt(pick(row, KEYS.pd)),
-    "Jumlah PTK": toInt(pick(row, KEYS.guru)),
-    "Jumlah Tendik": toInt(pick(row, KEYS.tendik)),
-    "Jumlah Rombel": toInt(pick(row, KEYS.rombel)),
+    "Jumlah Guru": toInt(pick(row, KEYS.guru)),
+    "Catatan Koordinat": coords ? "" : had ? `Koordinat Dapodik tidak valid (${rawLat} & ${rawLng}), dicari ulang` : "Dapodik tidak memuat koordinat",
+    "Kepala Sekolah": text("nama_kepsek"),
+    "Status Kepemilikan": text("status_kepemilikan"),
     Akreditasi: String(pick(row, KEYS.akreditasi)).trim(),
+    "Kode Pos": text("kode_pos"),
+    RT: text("rt"),
+    RW: text("rw"),
+    "PD Laki-laki": toInt(row.pd_l),
+    "PD Perempuan": toInt(row.pd_p),
+    Rombel: toInt(pick(row, KEYS.rombel)),
+    "PTK Total": toInt(row.jum_ptk),
+    "Tenaga Kependidikan": toInt(pick(row, KEYS.tendik)),
+    "Ruang Kelas": toInt(row.ruang_kelas),
+    "Kelas Rusak Berat": toInt(row.kelas_berat),
+    Perpustakaan: toInt(row.perpus),
+    "Lab Komputer": toInt(row.lab_kom),
+    "Toilet Siswa": toInt(row.wc_siswa),
+    "Sumber Listrik": text("sumber_listrik"),
+    "Daya Listrik": text("daya_listrik"),
+    "Layanan Internet": text("internet_jenis_layanan"),
+    "Penyedia Internet": text("internet_provider"),
+    "Bandwidth Internet": text("internet_bandwidth"),
+    "Partisipasi BOSP": text("partisipasi_bos"),
+    "Semester Data": text("semester"),
     Sumber: "Dapodik",
   };
 }
