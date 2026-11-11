@@ -45,3 +45,21 @@ jobs:
         run: npm test
       - name: Build web
         run: npm run build
+
+  sync-worker:
+    name: Pekerja sinkronisasi
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Pasang dependensi dan Chromium
+        working-directory: apps/sync
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+      - name: Tes pekerja
+        working-directory: apps/sync
+        run: npm test

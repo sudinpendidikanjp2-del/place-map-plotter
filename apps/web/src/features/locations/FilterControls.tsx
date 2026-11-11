@@ -38,6 +38,14 @@ export function FilterControls({ layout = "row" }: { layout?: "row" | "stack" })
           </Chip>
         ))}
       </div>
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Koordinat">
+        <Chip active={filter.coords === "none"} onClick={() => patch({ coords: filter.coords === "none" ? undefined : "none" })}>
+          Tanpa koordinat
+        </Chip>
+        <Chip active={filter.coords === "geocoded"} onClick={() => patch({ coords: filter.coords === "geocoded" ? undefined : "geocoded" })}>
+          Koordinat perkiraan
+        </Chip>
+      </div>
       <Input aria-label="Cari nama atau alamat" placeholder="Cari nama atau alamat" value={text} onChange={(e) => setText(e.target.value)} className={layout === "row" ? "w-full sm:w-56" : ""} />
       <Select aria-label="Jenjang" value={filter.level ?? ""} onChange={(e) => patch({ level: (e.target.value || undefined) as Level | undefined })} className={layout === "row" ? "w-full sm:w-44" : ""}>
         <option value="">Semua jenjang</option>

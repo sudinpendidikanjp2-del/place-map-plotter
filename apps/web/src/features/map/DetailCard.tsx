@@ -14,6 +14,7 @@ export function DetailCard({
   onEdit,
   onDelete,
   onToggleRoute,
+  onConfirmCoords,
 }: {
   location: Location;
   canEdit: boolean;
@@ -22,6 +23,7 @@ export function DetailCard({
   onEdit: () => void;
   onDelete: () => void;
   onToggleRoute: () => void;
+  onConfirmCoords: () => void;
 }) {
   const [photoFailed, setPhotoFailed] = useState(false);
   const region = [location.district, location.city, location.province].filter(Boolean).join(", ");
@@ -66,9 +68,24 @@ export function DetailCard({
           </p>
         )}
         {region && location.address && <p className="text-[13px] text-ink-2">Wilayah: {region}</p>}
-        <p className="num text-[13px] text-ink-2">
-          {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
-        </p>
+        {location.latitude === null || location.longitude === null ? (
+          <p className="rounded-control bg-surface-2 px-3 py-2 text-[13px] text-ink-2">Belum ada koordinat, jadi lokasi ini tidak tampil di peta. Tambahkan lewat Ubah.</p>
+        ) : (
+          <p className="num text-[13px] text-ink-2">
+            {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
+          </p>
+        )}
+        {location.coordSource === "geocoded" && (
+          <div role="note" className="rounded-control border border-accent bg-accent/15 px-3 py-2 text-[13px]">
+            <p className="font-medium">Koordinat perkiraan</p>
+            <p className="text-ink-2">Dicari otomatis dari nama tempat{location.geocodeNote ? `: ${location.geocodeNote}` : ""}. Periksa letaknya di peta.</p>
+            {canEdit && (
+              <Button className="mt-2" icon="check" onClick={onConfirmCoords}>
+                Tandai sudah benar
+              </Button>
+            )}
+          </div>
+        )}
         {location.description && <p>{location.description}</p>}
         {attrs.length > 0 && (
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[13px]">
@@ -81,7 +98,7 @@ export function DetailCard({
           </dl>
         )}
         <div className="flex flex-wrap gap-2 pt-1">
-          <Button variant={inRoute ? "primary" : "secondary"} icon="route" onClick={onToggleRoute}>
+          <Button variant={inRoute ? "primary" : "secondary"} icon="route" disabled={location.latitude === null} onClick={onToggleRoute}>
             {inRoute ? "Keluarkan dari rute" : "Tambah ke rute"}
           </Button>
           {canEdit && (

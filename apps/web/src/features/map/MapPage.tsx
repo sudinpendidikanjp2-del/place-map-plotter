@@ -122,11 +122,24 @@ function MapScreen({ config }: { config: MapsConfig }) {
   const inRoute = selected ? stops.some((s) => s.id === selected.id) : false;
   const toggleRoute = () => {
     if (!selected) return;
+    const { id, name, latitude: lat, longitude: lng } = selected;
+    if (lat === null || lng === null) return;
     setRoute((r) => ({
       open: true,
-      stops: inRoute ? r.stops.filter((s) => s.id !== selected.id) : r.stops.length >= 27 ? r.stops : [...r.stops, { id: selected.id, name: selected.name, lat: selected.latitude, lng: selected.longitude }],
+      stops: inRoute ? r.stops.filter((s) => s.id !== id) : r.stops.length >= 27 ? r.stops : [...r.stops, { id, name, lat, lng }],
     }));
   };
+
+  async function confirmCoords() {
+    if (!selected) return;
+    try {
+      setSelected(await api.confirmCoords(selected.id));
+      setRefreshKey((k) => k + 1);
+      toast.ok("Koordinat ditandai sudah benar.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Gagal menyimpan.");
+    }
+  }
 
   async function remove() {
     if (!selected) return;
@@ -252,6 +265,7 @@ function MapScreen({ config }: { config: MapsConfig }) {
             onEdit={() => setForm({ location: selected })}
             onDelete={() => setConfirmDelete(true)}
             onToggleRoute={toggleRoute}
+            onConfirmCoords={() => void confirmCoords()}
           />
         )}
         {layer.truncated && (
@@ -378,7 +392,7 @@ function FocusSelected({ location }: { location: Location | null }) {
   const map = useMap();
   const last = useRef<string | null>(null);
   useEffect(() => {
-    if (!map || !location || last.current === location.id) return;
+    if (!map || !location || location.latitude === null || location.longitude === null || last.current === location.id) return;
     last.current = location.id;
     const b = map.getBounds();
     if (!b || !b.contains({ lat: location.latitude, lng: location.longitude }) || (map.getZoom() ?? 0) < 12) {

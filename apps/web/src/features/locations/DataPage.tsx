@@ -224,7 +224,11 @@ export function DataPage() {
                 <button type="button" onClick={() => navigate(`/?lokasi=${l.id}`)} className="flex min-w-0 items-center gap-3 rounded-control text-left">
                   {canEdit && <KindBadge kind={l.kind} size={28} />}
                   <span className="min-w-0">
-                    <span className="block truncate font-medium">{l.name}</span>
+                    <span className="block truncate font-medium">
+                      {l.name}
+                      {l.latitude === null && <span className="ml-2 rounded-md bg-surface-2 px-1.5 py-0.5 text-[12px] font-normal text-ink-2">Tanpa titik</span>}
+                      {l.coordSource === "geocoded" && <span className="ml-2 rounded-md bg-accent/25 px-1.5 py-0.5 text-[12px] font-normal">Titik perkiraan</span>}
+                    </span>
                     <span className="block truncate text-[13px] text-ink-2 md:hidden">{[l.level ?? l.category, l.city].filter(Boolean).join(" · ")}</span>
                     <span className="hidden truncate text-[13px] text-ink-2 md:block">{l.address ?? "Alamat belum diisi"}</span>
                   </span>

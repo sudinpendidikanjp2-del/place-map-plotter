@@ -9,6 +9,7 @@ Hasil refactor dari "CSV Pinpoint Map Plotter". Latar belakang dan keputusan ada
 ```
 packages/domain   Fungsi murni dan tipe (validasi, CSV, alamat, filter). Dipakai web dan server.
 apps/server       Node 24, tanpa framework. PostgreSQL + PostGIS lewat satu paket: postgres.
+apps/sync         Pekerja Playwright terjadwal untuk sinkronisasi Dapodik (lihat apps/sync/README.md).
 apps/web          React 19 + Vite + Tailwind 4. Google Maps lewat @vis.gl/react-google-maps.
 deploy            Docker Compose (PostGIS, aplikasi, Caddy), cadangan, pemulihan.
 scripts           Seed data uji dan benchmark skala.

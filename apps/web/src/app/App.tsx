@@ -10,6 +10,7 @@ import { MapPage } from "../features/map/MapPage.tsx";
 import { DataPage } from "../features/locations/DataPage.tsx";
 import { ImportPage } from "../features/import/ImportPage.tsx";
 import { AdminPage } from "../features/admin/AdminPage.tsx";
+import { SyncPage } from "../features/sync/SyncPage.tsx";
 
 // Pustaka PDF dan grafik hanya dimuat saat layar Laporan dibuka.
 const ReportPage = lazy(() => import("../features/report/ReportPage.tsx").then((m) => ({ default: m.ReportPage })));
@@ -27,6 +28,7 @@ function Routes() {
       </Suspense>
     );
   if (path === "/admin" && can("admin")) return <AdminPage />;
+  if (path === "/sinkronisasi" && can("admin")) return <SyncPage />;
   return <NotFound />;
 }
 

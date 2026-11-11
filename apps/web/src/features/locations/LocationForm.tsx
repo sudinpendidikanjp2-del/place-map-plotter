@@ -20,8 +20,8 @@ function toDraft(l: Location | null, at?: { lat: number; lng: number }): Draft {
     category: l?.category ?? "",
     level: l?.level ?? "",
     npsn: l?.npsn ?? "",
-    latitude: l ? String(l.latitude) : at ? at.lat.toFixed(6) : "",
-    longitude: l ? String(l.longitude) : at ? at.lng.toFixed(6) : "",
+    latitude: l ? (l.latitude === null ? "" : String(l.latitude)) : at ? at.lat.toFixed(6) : "",
+    longitude: l ? (l.longitude === null ? "" : String(l.longitude)) : at ? at.lng.toFixed(6) : "",
     address: l?.address ?? "",
     province: l?.province ?? "",
     city: l?.city ?? "",
@@ -194,11 +194,11 @@ function Inner({ location, at, categories, onClose, onSaved }: { location: Locat
           {(p) => <Input {...p} inputMode="numeric" maxLength={8} value={d.npsn} onChange={set("npsn")} />}
         </Field>
       )}
-      <Field label="Lintang" error={errors.latitude} hint="Antara -90 dan 90">
-        {(p) => <Input {...p} inputMode="decimal" required value={d.latitude} onChange={set("latitude")} />}
+      <Field label="Lintang" error={errors.latitude} hint="Antara -90 dan 90. Kosongkan keduanya bila belum diketahui.">
+        {(p) => <Input {...p} inputMode="decimal" value={d.latitude} onChange={set("latitude")} />}
       </Field>
-      <Field label="Bujur" error={errors.longitude} hint="Antara -180 dan 180">
-        {(p) => <Input {...p} inputMode="decimal" required value={d.longitude} onChange={set("longitude")} />}
+      <Field label="Bujur" error={errors.longitude} hint="Antara -180 dan 180. Lokasi tanpa koordinat tidak tampil di peta.">
+        {(p) => <Input {...p} inputMode="decimal" value={d.longitude} onChange={set("longitude")} />}
       </Field>
       <Field label="Alamat" error={errors.address} className="sm:col-span-2">
         {(p) => <Input {...p} value={d.address} onChange={set("address")} />}

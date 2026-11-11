@@ -1,5 +1,7 @@
 # Menarik data dari Dapodik
 
+> **Pembaruan:** pekerja terjadwal berbasis otomasi peramban sudah ada di `apps/sync` (lihat `apps/sync/README.md`). Dasarnya skrip Playwright milik pengguna yang diberi izin otomasi berkala oleh pemilik data. Bagian di bawah adalah riset awal sebelum itu.
+
 Ringkasan riset dan keputusan untuk permintaan "tarik data otomatis dari dapo.kemendikdasmen.go.id".
 
 ## Temuan (diperiksa langsung, November 2026)
@@ -19,6 +21,7 @@ Ringkasan riset dan keputusan untuk permintaan "tarik data otomatis dari dapo.ke
 | **Impor CSV hasil ekspor resmi** | **Sudah ada** | Kolom Dapodik dikenali otomatis. NPSN yang sama memperbarui data lama. Cocok untuk penarikan berkala manual. |
 | API resmi dengan kredensial dari instansi | Belum dibangun | Perlu spesifikasi dan token dari Kemendikdasmen atau katalog Bappenas. Setelah ada, konektor tinggal memetakan responsnya ke `LocationInput` dan memakai pembaruan NPSN yang sama. |
 | Mengambil tabel HTML Data Referensi | Belum dibangun | Halaman publik, tetapi perlu izin penggunaan, batas laju sopan, dan pemeriksaan `robots.txt` host itu. Tidak memuat koordinat. |
+| Otomasi peramban terjadwal oleh operator yang berizin | **Sudah ada** (`apps/sync`) | Hanya menangkap respons yang dipanggil halaman portal sendiri, jeda sopan, berhenti bila ditolak. Belum diuji terhadap portal asli. |
 | Menembus WAF atau memakai token dari `env.js` | **Tidak dilakukan** | Melewati perlindungan akses. |
 
 ## Kolom CSV yang dikenali
@@ -41,3 +44,11 @@ Kolom lain (mis. Status Sekolah, Akreditasi) disimpan sebagai data tambahan. Kol
 1. Mintalah akses data resmi ke Kemendikdasmen (Pusdatin) atau lewat katalog API Bappenas, sebutkan kebutuhan: daftar satuan pendidikan per wilayah dengan NPSN, jenjang, koordinat, jumlah PD dan PTK.
 2. Sambil menunggu, unduh ekspor yang tersedia dan impor lewat layar Impor.
 3. Bila API resmi sudah ada, kirimkan spesifikasi dan cara autentikasinya. Konektornya kecil karena penyimpanan, pembaruan NPSN, dan pengelompokan peta sudah tersedia.
+
+## Koordinat
+
+Data Dapodik (detail sekolah) tidak memuat lintang dan bujur. Karena itu:
+- Sekolah dari sinkronisasi masuk **tanpa koordinat** (lokasi boleh belum bertitik) dan tidak tampil di peta sampai punya titik.
+- Layar Sinkronisasi mencari titiknya lewat Google Places dari nama dan wilayah, dibatasi kuota harian (`GEOCODE_DAILY_LIMIT`, bawaan 500). Hasil ditolak bila di luar Indonesia atau alamatnya tidak memuat nama kota yang sama.
+- Titik hasil pencarian ditandai **perkiraan** di peta dan daftar, dan baru dianggap benar setelah ada yang menekan "Tandai sudah benar". Titik yang diperbaiki manual tidak pernah ditimpa oleh sinkronisasi berikutnya.
+- Pencarian otomatis berkala bisa dinyalakan dengan `GEOCODE_AUTO=true`. Bawaannya mati agar biaya tidak mengejutkan.
