@@ -41,8 +41,8 @@ const cases: [string, () => string][] = [
   ["ringkasan laporan seluruh data", () => "/api/reports/summary"],
   ["ringkasan area peta", () => "/api/reports/summary?west=106.5&south=-7&east=107.5&north=-6"],
 ];
-const COLD = 12;
-const WARM = 30;
+const COLD = Number(process.env.BENCH_COLD ?? 12);
+const WARM = Number(process.env.BENCH_WARM ?? 30);
 console.log(`Data: ${n.toLocaleString("id-ID")} lokasi. Dingin = cache hasil dikosongkan sebelum tiap permintaan (${COLD}x). Hangat = hasil sudah di cache (${WARM}x).\n`);
 console.log("kasus".padEnd(44), "dingin p50".padStart(11), "dingin p95".padStart(11), "hangat p95".padStart(11));
 for (const [name, mk] of cases.filter(([nm]) => !process.env.BENCH_ONLY || nm.includes(process.env.BENCH_ONLY))) {
