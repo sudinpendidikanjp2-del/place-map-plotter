@@ -67,6 +67,8 @@ Catatan: filter lingkaran 5 km pada 10 juta lokasi masih 1,4 detik karena data u
 | Gambar lokasi | Hingga 8 gambar per lokasi, disimpan di volume `media` (ikut dicadangkan oleh `backup.sh`). Gambar dikecilkan di peramban (1600 px dan thumbnail 400 px) dan EXIF dibuang. Server memeriksa isi berkas, bukan klaim klien. Berkas yatim disapu setiap hari. |
 | Tarik data dari Dapodik | **Tidak otomatis penuh.** API portal baru memerlukan token dan dilindungi WAF, sehingga tidak ditembus. Tersedia: impor CSV dengan kolom Dapodik dikenali dan pembaruan berdasarkan NPSN. Lihat `docs/DAPODIK.md`. |
 
+Benchmark 10 juta lokasi setelah jenjang ditambahkan (setelah `VACUUM ANALYZE`): cluster 2 sampai 4 ms, ringkasan 5 ms, daftar 13 ms, pencarian 131 ms, filter lingkaran 5 km 1,8 detik (data uji sangat padat). Migrasi 006 pada 10 juta baris memakan 16 menit dan menambah ukuran tabel, lihat `deploy/README.md`.
+
 Pengujian: 11 tes domain dan 26 tes server lulus (termasuk impor gaya Dapodik, unggah gambar, pencarian tempat, dan konsistensi pra-agregasi dengan jenjang). Skrip peramban `scripts/e2e/fitur.cjs` menguji alur filter, cari tempat, gambar, dan label.
 
 **Belum dikerjakan atau berbeda dari PRD**

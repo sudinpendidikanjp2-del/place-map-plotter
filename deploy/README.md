@@ -38,6 +38,10 @@ Pengukuran di mesin 4 vCPU dan 16 GB pada 1 juta lokasi: 571 MB di disk (tabel d
 - Pemantauan dasar: `/api/health` mengembalikan 200 bila server dan basis data hidup. Pasang pemeriksa eksternal (mis. UptimeRobot) ke alamat itu.
 - Keamanan: `unattended-upgrades` aktif, login SSH hanya dengan kunci, PostgreSQL tidak membuka port ke luar.
 
+## Migrasi pada tabel besar
+
+Migrasi 004 sampai 006 membangun ulang tabel pra-agregasi dan satu di antaranya (006) memperbarui seluruh baris sekolah. Pada 10 juta lokasi: migrasi 005 sekitar 70 detik, migrasi 006 sekitar 16 menit dan menambah ukuran tabel dari 5,6 GB menjadi 9 GB karena baris mati. Jalankan migrasi besar saat sepi (aplikasi tidak melayani permintaan selama migrasi berjalan di awal server), lalu **segera jalankan `VACUUM (ANALYZE) locations`** (sekitar 2 menit pada 10 juta baris). Tanpa itu daftar dan pencarian sempat 10 kali lebih lambat. Pada instalasi baru atau di bawah 1 juta lokasi, semua ini selesai dalam hitungan detik.
+
 ## Pra-agregasi cluster
 
 Peta tidak menghitung cluster dari jutaan baris. Tabel `cluster_cells` menyimpan jumlah dan jumlah koordinat per sel grid untuk zoom 0 sampai 14, per (jenis, kategori, provinsi). Pemicu PostgreSQL menjaganya tetap sinkron saat tambah, ubah, hapus, impor, dan `TRUNCATE`, sehingga hasilnya selalu sama dengan hitungan langsung (diuji).
