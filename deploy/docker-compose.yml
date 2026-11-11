@@ -29,12 +29,11 @@ services:
     shm_size: 1gb
 
   app:
+    # Pakai image rilis dari GHCR, atau bangun sendiri dengan: docker compose build
+    image: ${APP_IMAGE:-ghcr.io/sudinpendidikanjp2-del/place-map-plotter:latest}
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-      args:
-        VITE_GOOGLE_MAPS_KEY: ${VITE_GOOGLE_MAPS_KEY:-}
-        VITE_GOOGLE_MAP_ID: ${VITE_GOOGLE_MAP_ID:-}
     restart: unless-stopped
     depends_on:
       db:
@@ -44,6 +43,8 @@ services:
       PORT: "3000"
       DATABASE_URL: postgres://peta:${POSTGRES_PASSWORD}@db:5432/peta
       TRUST_PROXY: "true"
+      GOOGLE_MAPS_KEY: ${GOOGLE_MAPS_KEY:-}
+      GOOGLE_MAP_ID: ${GOOGLE_MAP_ID:-}
       STATIC_MAPS_KEY: ${STATIC_MAPS_KEY:-}
       DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
 

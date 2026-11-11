@@ -100,7 +100,13 @@ export interface ListResult {
 
 const qs = (p: URLSearchParams) => (p.size ? `?${p}` : "");
 
+export interface MapsConfig {
+  mapsKey: string;
+  mapId: string;
+}
+
 export const api = {
+  config: (signal?: AbortSignal) => request<MapsConfig>("/api/config", signal ? { signal } : {}),
   me: (signal?: AbortSignal) => request<{ user: SessionUser }>("/api/auth/me", signal ? { signal } : {}),
   login: (email: string, password: string) => request<{ user: SessionUser }>("/api/auth/login", { method: "POST", json: { email, password } }),
   logout: () => request<{ ok: true }>("/api/auth/logout", { method: "POST" }),

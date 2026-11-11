@@ -8,10 +8,6 @@ COPY apps/server/package.json apps/server/
 RUN npm ci
 COPY packages packages
 COPY apps apps
-# Kunci Maps untuk web dibaca saat build dan tertanam di berkas statik. Wajib dibatasi referrer HTTP.
-ARG VITE_GOOGLE_MAPS_KEY=""
-ARG VITE_GOOGLE_MAP_ID=""
-ENV VITE_GOOGLE_MAPS_KEY=$VITE_GOOGLE_MAPS_KEY VITE_GOOGLE_MAP_ID=$VITE_GOOGLE_MAP_ID
 RUN npm run build
 
 FROM node:24-slim

@@ -1,0 +1,101 @@
+name: Release
+
+# Setiap push ke main: jalankan tes, buat rilis GitHub bernomor otomatis, dan publikasikan image Docker ke GHCR.
+# Tambahkan "[skip release]" pada pesan commit untuk melewati rilis (mis. perubahan dokumen saja).
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    if: ${{ !contains(github.event.head_commit.message, '[skip release]') }}
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    name: Rilis dan publikasi paket
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write   # membuat tag dan rilis
+      packages: write   # mendorong image ke ghcr.io
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Tentukan versi
+        id: version
+        # Mayor.minor diambil dari package.json, patch dari nomor eksekusi workflow. Naikkan mayor/minor lewat package.json.
+        run: |
+          base="$(node -p "require('./package.json').version.split('.').slice(0,2).join('.')")"
+          version="${base}.${GITHUB_RUN_NUMBER}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Build web untuk lampiran rilis
+        run: |
+          npm run build
+          tar -czf "peta-sekolah-web-${{ steps.version.outputs.version }}.tar.gz" -C apps/web/dist .
+
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Metadata image
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=latest
+            type=sha,format=short
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+      - name: Build dan publikasi image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Buat rilis GitHub
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:${VERSION}"
+          cat > notes.md <<NOTES
+          ## Pemasangan
+
+          \`\`\`bash
+          docker pull ${image}
+          \`\`\`
+
+          Panduan lengkap ada di [deploy/README.md](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/deploy/README.md).
+          NOTES
+          gh release create "$TAG" "peta-sekolah-web-${VERSION}.tar.gz" \
+            --target "$GITHUB_SHA" \
+            --title "Peta Sekolah ${TAG}" \
+            --generate-notes \
+            --notes-file notes.md

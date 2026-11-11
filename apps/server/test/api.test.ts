@@ -17,6 +17,9 @@ test("tanpa login semua rute data menolak dengan 401, kecuali login dan health",
     assert.equal(r.status, 401, path);
   }
   assert.equal((await anon.json("/api/health")).status, 200);
+  const cfg = await anon.json("/api/config");
+  assert.equal(cfg.status, 200);
+  assert.deepEqual(Object.keys(cfg.body).sort(), ["mapId", "mapsKey"]);
 });
 
 test("login gagal memberi 401 dan permintaan tanpa asal dikenali ditolak (CSRF)", async () => {
@@ -133,6 +136,38 @@ test("pra-agregasi cluster selalu sama dengan hitungan langsung setelah tambah, 
   const singles = await h.app.repo.clustersFromCells({ bbox }, 14);
   const one = singles.find((x) => x.count === 1);
   assert.ok(one && one.id && one.name, "sel tunggal harus membawa id dan nama");
+});
+
+test("ringkasan dari pra-agregasi sama dengan hitungan langsung, termasuk setelah perubahan", async () => {
+  const editor = await h.client("editor");
+  await h.sql`truncate locations restart identity cascade`;
+  await h.sql`
+    insert into locations (kind, name, category, province, students, teachers, geom)
+    select (array['sekolah','fasilitas','aset'])[1 + g % 3], 'S' || g, (array['SD','SMP','Gedung'])[1 + g % 3],
+      (array['Jawa Barat','Bali',null])[1 + g % 3], case when g % 3 = 1 then 50 + g % 400 end, case when g % 3 = 1 then 3 + g % 30 end,
+      ST_SetSRID(ST_MakePoint(100 + random() * 40, -9 + random() * 14), 4326)
+    from generate_series(1, 1500) g`;
+  const all = { west: -180, south: -90, east: 180, north: 90 };
+  const compare = async (f: Record<string, unknown>, label: string) => {
+    const fast = await h.app.repo.summaryFromAggregates(f as never);
+    const slow = await h.app.repo.computeSummary(f as never);
+    const norm = (x: typeof fast) => ({ ...x, addedPerMonth: [], byProvince: [...x.byProvince].sort((a, b) => a.province.localeCompare(b.province)), byCategory: [...x.byCategory].sort((a, b) => a.category.localeCompare(b.category)), byKind: [...x.byKind].sort((a, b) => a.kind.localeCompare(b.kind)) });
+    // computeSummary menamai provinsi kosong "Belum diketahui" juga, jadi bentuknya sama.
+    assert.deepEqual(norm(fast), norm(slow), label);
+  };
+  await compare({}, "tanpa filter");
+  await compare({ kind: "sekolah" }, "jenis");
+  await compare({ province: "Bali", category: "SMP" }, "provinsi dan kategori");
+  await compare({ bbox: all }, "area seluruh dunia");
+  await h.sql`update locations set students = students + 1000 where id % 9 = 0`;
+  await h.sql`update locations set category = 'Ganti', province = 'Banten' where id % 13 = 0`;
+  await h.sql`delete from locations where id % 7 = 0`;
+  await editor.json("/api/locations", { method: "POST", json: sampleLocation({ students: 77, teachers: 5 }) });
+  await compare({}, "setelah ubah, hapus, tambah");
+  await compare({ kind: "sekolah", bbox: all }, "jenis dengan area");
+  const trend = (await h.app.repo.summaryFromAggregates({})).addedPerMonth;
+  assert.equal(trend.length, 1);
+  assert.equal(trend[0]!.count, Number((await h.sql`select count(*) from locations`)[0]!.count));
 });
 
 test("batas area mengikuti filter dan kosong bila tidak ada data", async () => {

@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { APIProvider, Map, useMap } from "@vis.gl/react-google-maps";
 import { hasActiveFilter, type Location, type LocationFilter } from "@peta/domain";
-import { api } from "../../data/api.ts";
+import { api, type MapsConfig } from "../../data/api.ts";
 import { useAuth } from "../../app/auth.tsx";
 import { useFilter } from "../../app/filter.tsx";
-import { mapId, mapsKey } from "../../app/env.ts";
 import { useRouter } from "../../app/router.tsx";
 import { useDebounced, useResource } from "../../shared/lib/hooks.ts";
 import { useTheme } from "../../shared/lib/theme.ts";
@@ -23,22 +22,31 @@ const INDONESIA = { lat: -2.5, lng: 118 };
 
 export function MapPage() {
   const [failure, setFailure] = useState<string | null>(null);
+  const config = useResource((s) => api.config(s), []);
   useEffect(() => {
     // Google memanggil fungsi global ini bila kunci ditolak (referrer salah, API belum aktif, atau tagihan belum diatur).
     (window as unknown as { gm_authFailure?: () => void }).gm_authFailure = () =>
       setFailure("Google Maps menolak kunci API. Periksa pembatasan referrer, API yang aktif, dan penagihan di Google Cloud Console.");
     return () => void delete (window as unknown as { gm_authFailure?: () => void }).gm_authFailure;
   }, []);
-  if (!mapsKey) return <MapUnavailable />;
+  if (config.status === "error" && !config.data) return <MapUnavailable reason="Konfigurasi peta tidak bisa dimuat dari server. Muat ulang halaman." />;
+  if (!config.data) {
+    return (
+      <div className="grid min-h-dvh place-items-center text-ink-2">
+        <Spinner className="size-6" />
+      </div>
+    );
+  }
+  if (!config.data.mapsKey) return <MapUnavailable />;
   if (failure) return <MapUnavailable reason={failure} />;
   return (
-    <APIProvider apiKey={mapsKey} language="id" region="ID" onError={() => setFailure("Google Maps gagal dimuat. Periksa koneksi internet dan kunci API.")}>
-      <MapScreen />
+    <APIProvider apiKey={config.data.mapsKey} language="id" region="ID" onError={() => setFailure("Google Maps gagal dimuat. Periksa koneksi internet dan kunci API.")}>
+      <MapScreen config={config.data} />
     </APIProvider>
   );
 }
 
-function MapScreen() {
+function MapScreen({ config }: { config: MapsConfig }) {
   const { can } = useAuth();
   const { filter, patch, setFilter } = useFilter();
   const { search, navigate } = useRouter();
@@ -124,7 +132,7 @@ function MapScreen() {
     <div className="relative h-dvh w-full overflow-hidden">
       <Map
         id="main"
-        mapId={mapId}
+        mapId={config.mapId}
         defaultCenter={INDONESIA}
         defaultZoom={5}
         mapTypeId={mapType}
@@ -401,8 +409,8 @@ function MapUnavailable({ reason }: { reason?: string }) {
       <div className="max-w-lg rounded-float border border-line bg-surface p-6 shadow-float">
         <h1 className="text-xl font-semibold">Peta belum bisa ditampilkan</h1>
         <p className="mt-2 text-ink-2">
-          {reason ? reason : <>Kunci Google Maps belum diatur. Isi <code className="rounded bg-surface-2 px-1 font-mono text-[13px]">VITE_GOOGLE_MAPS_KEY</code> dan{" "}
-          <code className="rounded bg-surface-2 px-1 font-mono text-[13px]">VITE_GOOGLE_MAP_ID</code> di berkas <code className="rounded bg-surface-2 px-1 font-mono text-[13px]">.env</code>, lalu bangun ulang aplikasi.</>}
+          {reason ? reason : <>Kunci Google Maps belum diatur. Isi <code className="rounded bg-surface-2 px-1 font-mono text-[13px]">GOOGLE_MAPS_KEY</code> dan{" "}
+          <code className="rounded bg-surface-2 px-1 font-mono text-[13px]">GOOGLE_MAP_ID</code> di lingkungan server (berkas <code className="rounded bg-surface-2 px-1 font-mono text-[13px]">.env</code>), lalu mulai ulang server.</>}
         </p>
         <p className="mt-2 text-ink-2">Layar lain tetap bisa dipakai tanpa peta.</p>
         <div className="mt-4 flex gap-2">

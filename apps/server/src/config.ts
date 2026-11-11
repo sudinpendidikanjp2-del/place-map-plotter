@@ -5,6 +5,9 @@ export interface Config {
   /** Origin tambahan yang diizinkan untuk permintaan penulisan (selain host yang sama). */
   allowedOrigins: string[];
   staticMapsKey: string | null;
+  /** Kunci dan ID peta untuk web. Dikirim lewat /api/config saat runtime, bukan ditanam saat build. */
+  mapsKey: string;
+  mapId: string;
   webDist: string;
   maxUploadBytes: number;
   dbPoolSize: number;
@@ -28,6 +31,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     secureCookies: env.COOKIE_SECURE !== "false" && env.NODE_ENV === "production",
     allowedOrigins: (env.ALLOWED_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean),
     staticMapsKey: env.STATIC_MAPS_KEY || null,
+    mapsKey: env.GOOGLE_MAPS_KEY ?? "",
+    mapId: env.GOOGLE_MAP_ID || "DEMO_MAP_ID",
     webDist: env.WEB_DIST ?? new URL("../../web/dist", import.meta.url).pathname,
     maxUploadBytes: int("MAX_UPLOAD_MB", 2048) * 1024 * 1024,
     dbPoolSize: int("DB_POOL_SIZE", 10),

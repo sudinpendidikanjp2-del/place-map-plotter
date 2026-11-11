@@ -103,6 +103,9 @@ export function createApp(config: Config, sql: Sql, opts: { trustProxy?: boolean
     sendJson(c.res, 200, { ok: true });
   });
 
+  // Publik: kunci Maps web memang terlihat di peramban dan wajib dibatasi referrer di Google Cloud Console.
+  router.get("/api/config", null, (c) => sendJson(c.res, 200, { mapsKey: config.mapsKey, mapId: config.mapId }, { "cache-control": "no-cache" }));
+
   router.post("/api/auth/login", null, async (c) => {
     const body = await readJson<{ email?: string; password?: string }>(c.req, 10_000);
     const email = String(body.email ?? "").trim().toLowerCase();

@@ -46,7 +46,7 @@ Tes server memakai basis data `peta_test` (bawaan `postgres://sekolah:dev@localh
 ## Prasyarat Google Cloud
 
 1. **Kunci web** (Maps JavaScript API, Places jika dipakai, Directions API): batasi *HTTP referrers* ke domain Anda.
-2. **ID peta** (Map Management) dengan gaya diredam, lalu isi `VITE_GOOGLE_MAP_ID`. `AdvancedMarker` mensyaratkannya.
+2. **ID peta** (Map Management) dengan gaya diredam, lalu isi `GOOGLE_MAP_ID`. `AdvancedMarker` mensyaratkannya.
 3. **Kunci server** (Static Maps API) untuk ekspor gambar peta: batasi *IP addresses* ke IP VPS, isi `STATIC_MAPS_KEY`.
 
 ## Deploy ke VPS

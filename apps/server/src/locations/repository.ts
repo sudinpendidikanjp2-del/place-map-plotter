@@ -55,7 +55,14 @@ export class LocationRepository {
       const dLat = radiusM / 111_320;
       const dLng = Math.min(180, radiusM / (111_320 * Math.max(0.01, Math.cos((lat * Math.PI) / 180))));
       c.push(sql`geom && ST_MakeEnvelope(${lng - dLng}, ${Math.max(-90, lat - dLat)}, ${lng + dLng}, ${Math.min(90, lat + dLat)}, 4326)`);
-      c.push(sql`ST_DWithin(geom::geography, ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography, ${radiusM})`);
+      if (radiusM <= 100_000) {
+        // Pendekatan ekuirektangular dengan aritmetika biasa, puluhan kali lebih cepat daripada jarak geografi per baris.
+        // Galatnya di bawah 0,5% untuk radius sampai 100 km. Radius lebih besar memakai jarak geografi yang tepat.
+        const kx = 111_320 * Math.cos((lat * Math.PI) / 180);
+        c.push(sql`(power((lng - ${lng}::float8) * ${kx}::float8, 2) + power((lat - ${lat}::float8) * ${111_320}::float8, 2)) <= ${radiusM * radiusM}::float8`);
+      } else {
+        c.push(sql`ST_DWithin(geom::geography, ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography, ${radiusM})`);
+      }
     }
     if (f.polygon) {
       const ring = [...f.polygon, f.polygon[0]!].map(([x, y]) => `${x} ${y}`).join(",");
@@ -218,7 +225,18 @@ export class LocationRepository {
           ? sql`${joiner} (name, id) > (${cur.n ?? ""}, ${cur.id})`
           : sql`${joiner} id < ${cur.id}`;
     }
-    const order = opts.sort === "nama" ? sql`order by locations.name, locations.id` : sql`order by locations.id desc`;
+    // Filter teks dan spasial memilih baris lewat indeks GIN atau GiST. Urutan murni berdasarkan kunci utama membuat
+    // perencana memindai seluruh tabel dari belakang (12 detik pada 10 juta baris). Ekspresi "+ 0" dan "|| ''"
+    // mematikan indeks urutan sehingga hasil indeks filter dipakai lebih dulu lalu diurutkan.
+    const selective = Boolean(f.q || f.circle || f.polygon || f.bbox);
+    const order =
+      opts.sort === "nama"
+        ? selective
+          ? sql`order by (locations.name || '') , locations.id`
+          : sql`order by locations.name, locations.id`
+        : selective
+          ? sql`order by (locations.id + 0) desc`
+          : sql`order by locations.id desc`;
     const cap = f.circle || f.polygon || f.bbox ? SPATIAL_TOTAL_CAP : TOTAL_CAP;
     const [rows, counted] = await Promise.all([
       sql<Location[]>`select ${this.columns()} from locations ${base} ${cursorCond} ${order} limit ${limit + 1}`,
@@ -360,10 +378,72 @@ export class LocationRepository {
   }
 
   async summary(f: LocationFilter): Promise<Summary> {
-    return this.memo(`summary|${JSON.stringify(f)}`, () => this.computeSummary(f));
+    return this.memo(`summary|${JSON.stringify(f)}`, () => (canUseCells(f, 14) ? this.summaryFromAggregates(f) : this.computeSummary(f)));
   }
 
-  private async computeSummary(f: LocationFilter): Promise<Summary> {
+  /**
+   * Ringkasan dari tabel pra-agregasi. Tanpa area: dari `stat_months`, tepat. Dengan area: dari `cluster_cells`
+   * pada zoom yang selnya kira-kira seperlima puluh lebar area, jadi angka di tepi area berupa perkiraan.
+   * Tren bulanan tidak tersedia untuk ringkasan berarea.
+   */
+  async summaryFromAggregates(f: LocationFilter): Promise<Summary> {
+    const sql = this.sql;
+    const dims = (): Frag[] => {
+      const c: Frag[] = [];
+      if (f.kind) c.push(sql`kind = ${f.kind}`);
+      if (f.category) c.push(sql`category = ${f.category}`);
+      if (f.province) c.push(sql`province = ${f.province}`);
+      return c;
+    };
+    const join = (c: Frag[]) => (c.length ? sql`where ${c.reduce((a, b) => sql`${a} and ${b}`)}` : sql``);
+    const spatial = f.bbox !== undefined;
+    let table: Frag;
+    let n: Frag;
+    let st: Frag;
+    let te: Frag;
+    const c = dims();
+    if (spatial) {
+      const b = f.bbox!;
+      const span = Math.max(b.east - b.west, 1e-6);
+      const zoom = Math.min(14, Math.max(0, Math.round(Math.log2((84.375 * 50) / span))));
+      const cell = 84.375 / 2 ** zoom;
+      c.push(sql`z = ${zoom}`);
+      c.push(sql`cx between ${Math.floor(b.west / cell)} and ${Math.floor(b.east / cell)}`);
+      c.push(sql`cy between ${Math.floor(b.south / cell)} and ${Math.floor(b.north / cell)}`);
+      table = sql`cluster_cells`;
+      n = sql`n`;
+      st = sql`sum_students`;
+      te = sql`sum_teachers`;
+    } else {
+      table = sql`stat_months`;
+      n = sql`n`;
+      st = sql`students`;
+      te = sql`teachers`;
+    }
+    const where = join(c);
+    const [totals, byKind, byCategory, byProvince, perMonth] = await Promise.all([
+      sql<{ total: number; students: number; teachers: number }[]>`
+        select coalesce(sum(${n}), 0)::int as total, coalesce(sum(${st}), 0)::float8 as students,
+          coalesce(sum(${te}), 0)::float8 as teachers from ${table} ${where}`,
+      sql<Summary["byKind"]>`
+        select kind, sum(${n})::int as count from ${table} ${where} group by kind having sum(${n}) > 0 order by count desc`,
+      sql<Summary["byCategory"]>`
+        select category, sum(${n})::int as count, coalesce(sum(${st}), 0)::float8 as students
+        from ${table} ${where} group by category having sum(${n}) > 0 order by count desc, category limit 20`,
+      sql<Summary["byProvince"]>`
+        select case when province = '' then 'Belum diketahui' else province end as province, sum(${n})::int as count
+        from ${table} ${where} group by province having sum(${n}) > 0 order by count desc limit 15`,
+      spatial
+        ? Promise.resolve([] as Summary["addedPerMonth"])
+        : sql<Summary["addedPerMonth"]>`
+            select to_char(month, 'YYYY-MM') as month, sum(n)::int as count from stat_months
+            ${c.length ? sql`${where} and` : sql`where`} month >= (date_trunc('month', now()) - interval '11 months')::date
+            group by month having sum(n) > 0 order by month`,
+    ]);
+    return { total: totals[0]!.total, students: totals[0]!.students, teachers: totals[0]!.teachers, byKind, byCategory, byProvince, addedPerMonth: perMonth };
+  }
+
+  async computeSummary(f: LocationFilter): Promise<Summary> {
     const sql = this.sql;
     const where = this.where(f);
     const [totals, byKind, byCategory, byProvince, perMonth] = await Promise.all([
