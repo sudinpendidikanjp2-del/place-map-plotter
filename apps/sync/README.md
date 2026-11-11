@@ -31,7 +31,7 @@ Buat token di layar Sinkronisasi (admin), lalu:
 
 ```bash
 cd apps/sync
-npm install
+npm ci
 npx playwright install chromium
 node src/run.mjs --dry                      # hanya membuat CSV di out/, tidak mengirim
 PETA_URL=https://peta.contoh.go.id PETA_TOKEN=peta_... node src/run.mjs
