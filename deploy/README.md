@@ -18,7 +18,7 @@ Pengukuran di mesin 4 vCPU dan 16 GB pada 1 juta lokasi: 571 MB di disk (tabel d
 
 1. Pasang Docker dan Compose. Buka hanya port 22 (kunci SSH), 80, dan 443 di firewall. Arahkan DNS domain ke IP VPS.
 2. `git clone` repositori, lalu `cd deploy && cp .env.example .env` dan isi nilainya.
-3. `docker compose up -d --build`. Migrasi skema berjalan otomatis saat server mulai.
+3. `docker compose pull && docker compose up -d` memakai image rilis dari GHCR (`APP_IMAGE` di `.env` bisa menunjuk versi tertentu). Untuk membangun dari sumber: `docker compose up -d --build`. Migrasi skema berjalan otomatis saat server mulai.
 4. Buat admin pertama:
    ```bash
    docker compose exec -e ADMIN_PASSWORD='kata-sandi-panjang' app node apps/server/src/auth/create-admin-cli.ts admin@contoh.id "Nama Admin"
@@ -33,7 +33,7 @@ Pengukuran di mesin 4 vCPU dan 16 GB pada 1 juta lokasi: 571 MB di disk (tabel d
 
 ## Operasi
 
-- Pembaruan: `git pull && docker compose up -d --build`. Migrasi baru dijalankan otomatis.
+- Pembaruan: `docker compose pull && docker compose up -d`. Migrasi baru dijalankan otomatis.
 - Log: `docker compose logs -f app`.
 - Pemantauan dasar: `/api/health` mengembalikan 200 bila server dan basis data hidup. Pasang pemeriksa eksternal (mis. UptimeRobot) ke alamat itu.
 - Keamanan: `unattended-upgrades` aktif, login SSH hanya dengan kunci, PostgreSQL tidak membuka port ke luar.

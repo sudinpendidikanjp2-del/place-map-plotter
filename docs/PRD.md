@@ -36,26 +36,30 @@ Keputusan tambahan dari pemilik produk: warna **biru dongker dan kuning**, data 
 
 **Skema data (praktik terbaik):** kolom bertipe untuk atribut yang diagregasi (`students`, `teachers`, `founded_year`), `kind` (sekolah, fasilitas, aset) dan `category` bebas, atribut lain di `attributes jsonb`, wilayah (`province`, `city`, `district`) diurai saat simpan dan diindeks, geometri `Point` dengan indeks GiST, `version` untuk kontrol konflik, `import_batch_id` untuk membatalkan impor.
 
-**Hasil benchmark, 1 juta lokasi sintetis** (mesin 4 vCPU, 16 GB, PostgreSQL 16, satu klien serial). Data uji berpusat di 8 kota sehingga lebih padat daripada data nyata.
+**Hasil benchmark** (mesin 4 vCPU, 16 GB, PostgreSQL 16, satu klien serial, p95, cache hasil kosong). Data uji sintetis berpusat di 8 kota, jadi jauh lebih padat daripada data nyata.
 
-| Kasus | Dingin p95 | Hangat p95 | Target v4 |
+| Kasus | 1 juta lokasi | 10 juta lokasi | Target |
 |---|---|---|---|
-| Cluster seluruh Indonesia (zoom 5) | 542 ms | 3 ms | < 200 ms **belum tercapai** dingin |
-| Cluster satu provinsi (zoom 9) | 303 ms | 3 ms | belum tercapai dingin |
-| Cluster satu kota (zoom 13, 125 ribu titik di area) | 224 ms | 200 ms | hampir |
-| Daftar 50 baris dengan filter | 13 ms | 4 ms | < 150 ms tercapai |
-| Pencarian teks | 23 ms | 11 ms | < 300 ms tercapai |
-| Filter lingkaran 5 km | 221 ms | 151 ms | tidak ada target |
-| Ringkasan laporan seluruh data | 463 ms | 3 ms | tidak ada target |
-| Impor CSV | 22.800 baris/detik | | ≥ 20.000 tercapai |
-| Ekspor CSV 21 MB | byte pertama 2 ms | | tercapai |
+| Cluster seluruh Indonesia, provinsi, kota, dengan filter | 2 sampai 12 ms | 2 sampai 4 ms | < 200 ms tercapai |
+| Daftar 50 baris dengan filter | 11 ms | 11 ms | < 150 ms tercapai |
+| Pencarian teks (trigram) | 18 ms | 78 ms | < 300 ms tercapai |
+| Ringkasan laporan dan strip angka peta | 3 ms | 4 ms | tercapai |
+| Filter lingkaran 5 km | 163 ms | 1.431 ms | tidak ada target, lihat catatan |
+| Impor CSV | 14.800 baris/detik | | turun dari 22.800 karena pra-agregasi |
+| Ekspor CSV | byte pertama 3 ms | byte pertama 2 ms (207 MB dialirkan) | tercapai |
 
-"Dingin" berarti cache hasil kosong. Cache memakai kunci versi data di PostgreSQL (naik otomatis oleh pemicu), sehingga tidak pernah basi dan berlaku lintas replika. Target cluster dingin di bawah 200 ms belum tercapai pada 1 juta baris. Langkah berikutnya bila dibutuhkan: pra-agregasi cluster per zoom (jalur pertumbuhan di `deploy/README.md`). Belum diukur pada 10 juta baris.
+Cara mencapainya:
+- **Pra-agregasi** (`cluster_cells` zoom 0 sampai 14 dan `stat_months`), dijaga oleh pemicu per pernyataan dan diuji sama dengan hitungan langsung. 23 MB pada 10 juta lokasi.
+- Cache hasil dengan kunci versi data di PostgreSQL, tidak pernah basi dan berlaku lintas replika.
+- `plan_cache_mode=force_custom_plan`: setelah 5 eksekusi PostgreSQL beralih ke rencana generik yang 5 kali lebih lambat.
+- Filter teks dan spasial memakai `order by id + 0`: tanpa itu perencana memindai seluruh tabel dari belakang (pencarian 12 detik menjadi 78 ms).
+- Filter lingkaran memakai pendekatan ekuirektangular (galat di bawah 0,5% sampai 100 km).
 
-Temuan yang membuat perbedaan terbesar: setelah 5 eksekusi PostgreSQL beralih ke rencana generik yang 5 kali lebih lambat untuk kueri peta. Diperbaiki dengan `plan_cache_mode=force_custom_plan`.
+Catatan: filter lingkaran 5 km pada 10 juta lokasi masih 1,4 detik karena data uji menaruh sekitar 800 ribu titik dalam satu lingkaran itu. Pada sebaran nyata jauh lebih ringan, tetapi belum diukur.
 
 **Belum dikerjakan atau berbeda dari PRD**
 - **Pencarian tempat (Places) dan impor batch nama tempat dari aplikasi lama tidak dipindahkan.** Keduanya memakai Places API berkuota dan tidak cocok untuk jutaan baris. Impor besar memakai CSV berkoordinat. Bisa ditambahkan bila diperlukan.
+- Kunci Maps web kini diberikan saat runtime lewat `/api/config` (`GOOGLE_MAPS_KEY`, `GOOGLE_MAP_ID`), bukan saat build, agar image Docker yang sama bisa dipakai di mana saja.
 - Peta diuji dengan Google Maps **tiruan**. Rendering sungguhan, Directions, dan gaya peta belum diverifikasi karena tidak ada kunci API.
 - Ekspor gambar peta dan PDF dengan gambar peta memerlukan `STATIC_MAPS_KEY`. Tanpa kunci, PDF tetap dibuat tanpa gambar.
 - Nama produk "Peta Sekolah" dan penanda huruf "P" adalah **penampung sementara**. Tidak ada logo yang dibuat.

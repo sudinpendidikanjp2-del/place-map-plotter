@@ -40,6 +40,7 @@ Data uji sintetis (bukan data nyata): `node scripts/seed.ts 5000 --reset`
 | `npm run typecheck` | Pemeriksaan tipe semua workspace |
 | `npm run build` | Membangun web ke `apps/web/dist` |
 | `node scripts/bench.ts` | Benchmark skala (setelah seed 1 juta baris) |
+| `node scripts/e2e/*.cjs` | Uji peramban Playwright, lihat `scripts/e2e/README.md` |
 
 Tes server memakai basis data `peta_test` (bawaan `postgres://sekolah:dev@localhost:5432/peta_test`) dan **mengosongkan tabelnya**. Jangan arahkan ke data nyata.
 
@@ -48,6 +49,12 @@ Tes server memakai basis data `peta_test` (bawaan `postgres://sekolah:dev@localh
 1. **Kunci web** (Maps JavaScript API, Places jika dipakai, Directions API): batasi *HTTP referrers* ke domain Anda.
 2. **ID peta** (Map Management) dengan gaya diredam, lalu isi `GOOGLE_MAP_ID`. `AdvancedMarker` mensyaratkannya.
 3. **Kunci server** (Static Maps API) untuk ekspor gambar peta: batasi *IP addresses* ke IP VPS, isi `STATIC_MAPS_KEY`.
+
+## Rilis otomatis
+
+Setiap push ke `main` menjalankan `.github/workflows/release.yml`: tes dan build (`ci.yml`), lalu membuat rilis GitHub `vMAYOR.MINOR.NOMOR_EKSEKUSI` dengan lampiran build web, dan mendorong image Docker ke `ghcr.io/<pemilik>/<repo>` bertag versi, `latest`, dan SHA. Mayor dan minor diambil dari `version` di `package.json`. Tambahkan `[skip release]` pada pesan commit untuk melewati rilis. Pull request menjalankan `ci.yml` saja.
+
+Setelah rilis pertama, atur paket di GitHub (Packages) agar terlihat oleh VPS: buat publik, atau login `docker login ghcr.io` di VPS dengan token yang punya `read:packages`.
 
 ## Deploy ke VPS
 
