@@ -40,6 +40,11 @@ export function parseFilter(q: URLSearchParams): LocationFilter {
     if (!(LEVELS as readonly string[]).includes(level)) throw badRequest("Jenjang tidak dikenal.");
     filter.level = level as Level;
   }
+  const coords = q.get("coords");
+  if (coords) {
+    if (coords !== "none" && coords !== "geocoded") throw badRequest("Parameter coords harus none atau geocoded.");
+    filter.coords = coords;
+  }
   const province = str(q.get("province"), 100);
   if (province) filter.province = province;
   const city = str(q.get("city"), 100);

@@ -54,8 +54,8 @@ interface StagedRow {
   students: number | null;
   teachers: number | null;
   attributes: string;
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
   province: string | null;
   city: string | null;
   district: string | null;
@@ -70,7 +70,7 @@ export class ImportService {
     this.maxBytes = maxBytes;
   }
 
-  async create(filename: string, defaultKind: string, userId: string): Promise<ImportBatch> {
+  async create(filename: string, defaultKind: string, userId: string | null): Promise<ImportBatch> {
     if (!(LOCATION_KINDS as readonly string[]).includes(defaultKind)) throw badRequest("Jenis bawaan tidak dikenal.");
     const name = filename.trim().slice(0, 255);
     if (!name) throw badRequest("Nama berkas wajib diisi.");
@@ -102,7 +102,7 @@ export class ImportService {
   }
 
   /** Memproses isi berkas secara bertahap. Memori tetap konstan berapa pun ukuran berkas. */
-  async run(id: string, body: AsyncIterable<Buffer | string>, userId: string): Promise<ImportBatch> {
+  async run(id: string, body: AsyncIterable<Buffer | string>, userId: string | null): Promise<ImportBatch> {
     const sql = this.sql;
     const batch = await this.get(id);
     if (batch.status !== "menunggu") throw conflict("Berkas untuk impor ini sudah pernah diproses.");
@@ -164,17 +164,20 @@ export class ImportService {
             (select distinct on (npsn) * from numbered where npsn is not null order by npsn, rn desc)
           )
           insert into locations (kind, name, category, level, npsn, address, description, founded_year, photo_url, students, teachers,
-            attributes, geom, province, city, district, import_batch_id, created_by, updated_by)
+            attributes, geom, province, city, district, import_batch_id, created_by, updated_by, coord_source)
           select kind, name, category, level, npsn, address, description, founded_year, photo_url, students, teachers,
-            attributes::jsonb, ST_SetSRID(ST_MakePoint(lng, lat), 4326), province, city, district,
-            ${id}, ${userId}, ${userId}
+            attributes::jsonb, case when lng is null then null else ST_SetSRID(ST_MakePoint(lng, lat), 4326) end, province, city, district,
+            ${id}, ${userId}, ${userId}, case when lng is null then 'none' else 'import' end
           from uniq
           on conflict (npsn) where npsn is not null do update set
             name = excluded.name, category = excluded.category, level = excluded.level, address = excluded.address,
             description = coalesce(excluded.description, locations.description),
             founded_year = coalesce(excluded.founded_year, locations.founded_year),
             students = coalesce(excluded.students, locations.students), teachers = coalesce(excluded.teachers, locations.teachers),
-            attributes = locations.attributes || excluded.attributes, geom = excluded.geom,
+            attributes = locations.attributes || excluded.attributes,
+            -- Koordinat dari impor tidak menimpa koordinat yang sudah diperiksa manual, dan baris tanpa koordinat tidak menghapusnya.
+            geom = case when excluded.geom is not null and locations.coord_source <> 'manual' then excluded.geom else locations.geom end,
+            coord_source = case when excluded.geom is not null and locations.coord_source <> 'manual' then 'import' else locations.coord_source end,
             province = excluded.province, city = excluded.city, district = excluded.district,
             updated_by = excluded.updated_by, version = locations.version + 1, updated_at = now()
           returning (xmax = 0) as inserted`;
@@ -189,7 +192,7 @@ export class ImportService {
       if (!headers) {
         headers = row.map((h) => h.trim());
         mapping = mapHeaders(headers);
-        const missing = (["name", "latitude", "longitude"] as const).filter((f) => mapping![f] === -1);
+        const missing = (["name"] as const).filter((f) => mapping![f] === -1);
         if (missing.length) return `Kolom wajib tidak ditemukan: ${missing.map((f) => FIELD_LABEL[f]).join(", ")}.`;
         return null;
       }

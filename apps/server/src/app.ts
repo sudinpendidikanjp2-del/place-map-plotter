@@ -13,8 +13,8 @@ import {
 } from "@peta/domain";
 import type { Config } from "./config.ts";
 import type { Sql } from "./db/client.ts";
-import { HttpError, badRequest, notFound, tooMany, unauthorized } from "./http/errors.ts";
-import { Router, authorize, readJson, sendJson, type Ctx } from "./http/router.ts";
+import { HttpError, badRequest, forbidden, notFound, tooMany, unauthorized } from "./http/errors.ts";
+import { Router, authorize, readJson, sendJson, type Ctx, type SessionUser } from "./http/router.ts";
 import { RateLimiter } from "./auth/rate-limit.ts";
 import { hashPassword, verifyPassword } from "./auth/password.ts";
 import { clearSessionCookie, createSession, destroySession, purgeExpiredSessions, sessionToken, setSessionCookie, userFromRequest } from "./auth/sessions.ts";
@@ -23,6 +23,9 @@ import { LocationRepository } from "./locations/repository.ts";
 import { parseBBox, parseFilter } from "./locations/filter.ts";
 import { ImportService } from "./imports/service.ts";
 import { ImageService } from "./images/service.ts";
+import { TokenService } from "./auth/tokens.ts";
+import { GeocodeService } from "./geocode/service.ts";
+import { SyncService } from "./sync/service.ts";
 import { ImageStore, type Variant } from "./images/store.ts";
 import { searchPlaces } from "./places/search.ts";
 
@@ -86,6 +89,7 @@ export interface App {
   server: Server;
   repo: LocationRepository;
   images: ImageService;
+  geocoder: GeocodeService;
   close(): Promise<void>;
 }
 
@@ -95,6 +99,11 @@ export function createApp(config: Config, sql: Sql, opts: { trustProxy?: boolean
   const imports = new ImportService(sql, config.maxUploadBytes);
   const images = new ImageService(sql, new ImageStore(config.mediaDir));
   const placesLimiter = new RateLimiter(30, 60_000);
+  const tokens = new TokenService(sql);
+  const syncRuns = new SyncService(sql);
+  const geocoder = new GeocodeService(sql, { key: config.serverKey, endpoint: config.placesEndpoint, dailyLimit: config.geocodeDailyLimit });
+  /** Pengguna untuk kolom created_by: token API tidak punya baris pengguna. */
+  const actorId = (c: Ctx): string | null => (c.user!.id.startsWith("token:") ? null : c.user!.id);
   const loginLimiter = new RateLimiter(10, 15 * 60_000);
   const ipLimiter = new RateLimiter(60, 15 * 60_000);
   const router = new Router();
@@ -261,18 +270,18 @@ export function createApp(config: Config, sql: Sql, opts: { trustProxy?: boolean
 
   // ---------- Impor ----------
   router.get("/api/imports", "viewer", async (c) => sendJson(c.res, 200, { items: await imports.list() }));
-  router.get("/api/imports/:id", "viewer", async (c) => sendJson(c.res, 200, await imports.get(c.params.id!)));
+  router.get("/api/imports/:id", "viewer", async (c) => sendJson(c.res, 200, await imports.get(c.params.id!)), { token: true });
   router.post("/api/imports", "editor", async (c) => {
     const body = await readJson<{ filename?: string; defaultKind?: string }>(c.req, 10_000);
-    sendJson(c.res, 201, await imports.create(String(body.filename ?? ""), String(body.defaultKind ?? "sekolah"), me(c).id));
-  });
+    sendJson(c.res, 201, await imports.create(String(body.filename ?? ""), String(body.defaultKind ?? "sekolah"), actorId(c)));
+  }, { token: true });
   router.put("/api/imports/:id/file", "editor", async (c) => {
     const declared = Number(c.req.headers["content-length"]);
     if (Number.isFinite(declared) && declared > config.maxUploadBytes) throw new HttpError(413, "too_large", "Berkas melebihi batas ukuran unggahan.");
-    const result = await imports.run(c.params.id!, c.req, me(c).id);
+    const result = await imports.run(c.params.id!, c.req, actorId(c));
     repo.invalidate();
     sendJson(c.res, 200, result);
-  });
+  }, { token: true });
   router.delete("/api/imports/:id", "editor", async (c) => {
     const r = await imports.cancel(c.params.id!);
     repo.invalidate();
@@ -346,6 +355,34 @@ export function createApp(config: Config, sql: Sql, opts: { trustProxy?: boolean
       if (!c.res.write(out)) await new Promise<void>((resolve) => c.res.once("drain", resolve).once("close", resolve));
     }
     c.res.end();
+  });
+
+  // ---------- Token API, sinkronisasi, dan pencarian koordinat otomatis ----------
+  router.get("/api/tokens", "admin", async (c) => sendJson(c.res, 200, { items: await tokens.list() }));
+  router.post("/api/tokens", "admin", async (c) => {
+    const body = await readJson<{ name?: string }>(c.req, 5_000);
+    sendJson(c.res, 201, await tokens.create(String(body.name ?? ""), me(c).id));
+  });
+  router.delete("/api/tokens/:id", "admin", async (c) => {
+    await tokens.revoke(c.params.id!);
+    sendJson(c.res, 200, { ok: true });
+  });
+
+  router.get("/api/sync/runs", "viewer", async (c) => sendJson(c.res, 200, await syncRuns.list(c.url.searchParams.get("source") ?? undefined)), { token: true });
+  router.post("/api/sync/runs", "editor", async (c) => sendJson(c.res, 201, await syncRuns.start(await readJson(c.req, 10_000))), { token: true });
+  router.patch("/api/sync/runs/:id", "editor", async (c) => sendJson(c.res, 200, await syncRuns.finish(c.params.id!, await readJson(c.req, 100_000))), { token: true });
+
+  router.get("/api/geocode/status", "admin", async (c) => sendJson(c.res, 200, await geocoder.status()));
+  router.post("/api/geocode/run", "admin", async (c) => {
+    const body = await readJson<{ limit?: unknown }>(c.req, 5_000);
+    const result = await geocoder.run(Number(body.limit) || 50);
+    repo.invalidate();
+    sendJson(c.res, 200, result);
+  });
+  router.post("/api/locations/:id/confirm-coords", "editor", async (c) => {
+    const l = await repo.confirmCoords(c.params.id!, actorId(c));
+    repo.invalidate();
+    sendJson(c.res, 200, l);
   });
 
   // ---------- Pencarian tempat (geokoding) ----------
@@ -423,7 +460,9 @@ export function createApp(config: Config, sql: Sql, opts: { trustProxy?: boolean
         return await serveStatic(req, res, url.pathname);
       }
 
-      if (method !== "GET" && method !== "HEAD") {
+      const bearer = /^Bearer\s+(\S+)$/i.exec(String(req.headers.authorization ?? ""))?.[1] ?? null;
+      // Permintaan bertoken tidak membawa cookie sesi dari peramban, jadi pemeriksaan CSRF tidak berlaku untuknya.
+      if (!bearer && method !== "GET" && method !== "HEAD") {
         const origin = req.headers.origin;
         const host = req.headers.host;
         let ok = false;
@@ -443,7 +482,15 @@ export function createApp(config: Config, sql: Sql, opts: { trustProxy?: boolean
       const matched = router.match(method === "HEAD" ? "GET" : method, url.pathname);
       if (!matched) throw notFound("Rute tidak ditemukan.");
       if (matched === "method") throw new HttpError(405, "method_not_allowed", "Metode tidak diizinkan.");
-      const user = await userFromRequest(sql, req);
+      let user: SessionUser | null;
+      if (bearer) {
+        const t = await tokens.verify(bearer);
+        if (!t) throw unauthorized("Token API tidak valid atau sudah dicabut.");
+        if (!matched.route.token) throw forbidden("Token API tidak boleh dipakai untuk rute ini.");
+        user = { id: `token:${t.id}`, email: `token:${t.name}`, name: t.name, role: "editor" };
+      } else {
+        user = await userFromRequest(sql, req);
+      }
       authorize(matched.route.minRole, user);
       res.setHeader("cache-control", "no-store");
       await matched.route.handler({ req, res, url, params: matched.params, user });
@@ -466,6 +513,8 @@ export function createApp(config: Config, sql: Sql, opts: { trustProxy?: boolean
   const sweep = setInterval(() => void purgeExpiredSessions(sql).catch(() => {}), 3_600_000);
   sweep.unref();
   // Berkas gambar yatim (lokasi dihapus massal) dibersihkan sekali saat mulai dan setiap hari.
+  const geocodeTimer = config.geocodeAuto && config.serverKey ? setInterval(() => void geocoder.run(25).then(() => repo.invalidate()).catch(() => {}), 300_000) : null;
+  geocodeTimer?.unref();
   const imageSweep = setInterval(() => void images.sweep().catch(() => {}), 86_400_000);
   imageSweep.unref();
   setTimeout(() => void images.sweep().catch(() => {}), 30_000).unref();
@@ -474,10 +523,12 @@ export function createApp(config: Config, sql: Sql, opts: { trustProxy?: boolean
     server,
     repo,
     images,
+    geocoder,
     close: () =>
       new Promise<void>((resolve) => {
         clearInterval(sweep);
         clearInterval(imageSweep);
+        if (geocodeTimer) clearInterval(geocodeTimer);
         server.close(() => resolve());
         server.closeAllConnections();
       }),

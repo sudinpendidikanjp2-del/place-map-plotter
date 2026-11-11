@@ -62,13 +62,18 @@ export function validateLocationInput(raw: Record<string, unknown>): Validation<
     return t ? t.slice(0, 100) : null;
   };
 
-  const latitude = numberOrNaN(raw.latitude);
-  const longitude = numberOrNaN(raw.longitude);
-  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
-    errors.latitude = "Lintang harus berupa angka antara -90 dan 90.";
-  }
-  if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
-    errors.longitude = "Bujur harus berupa angka antara -180 dan 180.";
+  // Koordinat boleh kosong bersama-sama. Bila salah satu terisi, keduanya harus sah.
+  const latBlank = text(raw.latitude) === "";
+  const lngBlank = text(raw.longitude) === "";
+  let latitude: number | null = null;
+  let longitude: number | null = null;
+  if (!(latBlank && lngBlank)) {
+    const la = numberOrNaN(raw.latitude);
+    const lo = numberOrNaN(raw.longitude);
+    if (!Number.isFinite(la) || la < -90 || la > 90) errors.latitude = "Lintang harus berupa angka antara -90 dan 90, atau kosongkan keduanya.";
+    else latitude = la;
+    if (!Number.isFinite(lo) || lo < -180 || lo > 180) errors.longitude = "Bujur harus berupa angka antara -180 dan 180, atau kosongkan keduanya.";
+    else longitude = lo;
   }
 
   const address = text(raw.address) || null;

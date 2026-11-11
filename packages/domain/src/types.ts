@@ -23,8 +23,9 @@ export interface LocationInput {
   province: string | null;
   city: string | null;
   district: string | null;
-  latitude: number;
-  longitude: number;
+  /** Kosong bila belum diketahui. Lokasi tanpa koordinat tidak tampil di peta. */
+  latitude: number | null;
+  longitude: number | null;
   address: string | null;
   description: string | null;
   foundedYear: number | null;
@@ -41,8 +42,13 @@ export interface LocationImage {
   caption: string | null;
 }
 
+export type CoordSource = "manual" | "import" | "geocoded" | "none";
+
 export interface Location extends LocationInput {
   id: string;
+  /** geocoded berarti koordinat dicari otomatis dari nama dan perlu diperiksa. */
+  coordSource: CoordSource;
+  geocodeNote: string | null;
   version: number;
   images: LocationImage[];
   createdAt: string;
@@ -77,6 +83,8 @@ export interface LocationFilter {
   kind?: LocationKind;
   category?: string;
   level?: Level;
+  /** none: belum punya koordinat. geocoded: koordinat perkiraan dari pencarian otomatis. */
+  coords?: "none" | "geocoded";
   province?: string;
   city?: string;
   district?: string;

@@ -18,7 +18,7 @@ export const INDIVIDUAL_ZOOM = 17;
 
 /** Pra-agregasi mencakup jenis, kategori, dan provinsi pada zoom 0 sampai 14. Filter lain memakai kueri langsung. */
 export function canUseCells(f: LocationFilter, zoom: number): boolean {
-  return zoom <= CELL_MAX_ZOOM && !f.q && !f.city && !f.district && !f.circle && !f.polygon;
+  return zoom <= CELL_MAX_ZOOM && !f.q && !f.city && !f.district && !f.circle && !f.polygon && !f.coords;
 }
 
 function duplicateNpsn(e: unknown): never {
@@ -39,9 +39,12 @@ export class LocationRepository {
     this.sql = sql;
   }
 
-  private where(f: LocationFilter): Frag {
+  private where(f: LocationFilter, onlyLocated = false): Frag {
     const sql = this.sql;
     const c: Frag[] = [];
+    if (onlyLocated) c.push(sql`geom is not null`);
+    if (f.coords === "none") c.push(sql`geom is null`);
+    if (f.coords === "geocoded") c.push(sql`coord_source = 'geocoded'`);
     if (f.kind) c.push(sql`kind = ${f.kind}`);
     if (f.category) c.push(sql`category = ${f.category}`);
     if (f.level) c.push(sql`level = ${f.level}`);
@@ -81,7 +84,7 @@ export class LocationRepository {
   private columns(): Frag {
     return this.sql`
       id::text, kind, name, category, level, npsn, address, description, founded_year, photo_url, students, teachers,
-      attributes, lat as latitude, lng as longitude, province, city, district,
+      attributes, lat as latitude, lng as longitude, province, city, district, coord_source, geocode_note,
       version, created_at, updated_at`;
   }
 
@@ -151,7 +154,7 @@ export class LocationRepository {
   /** Kueri langsung ke tabel lokasi. Dipakai untuk zoom dekat dan filter yang tidak tercakup pra-agregasi. */
   async clustersLive(f: LocationFilter, zoom: number, cell = 84.375 / 2 ** zoom): Promise<ClusterFeature[]> {
     const sql = this.sql;
-    const where = this.where(f);
+    const where = this.where(f, true);
     if (zoom >= INDIVIDUAL_ZOOM) {
       return sql<ClusterFeature[]>`
         select 1 as count, lat, lng, id::text as id, kind, name
@@ -285,11 +288,11 @@ export class LocationRepository {
     const geo = parseAddress(input.address);
     const rows = await sql<{ id: string }[]>`
       insert into locations (kind, name, category, level, npsn, address, description, founded_year, photo_url, students, teachers,
-        attributes, geom, province, city, district, created_by, updated_by)
+        attributes, geom, province, city, district, created_by, updated_by, coord_source)
       values (${input.kind}, ${input.name}, ${input.category}, ${input.level}, ${input.npsn}, ${input.address}, ${input.description},
         ${input.foundedYear}, ${input.photoUrl}, ${input.students}, ${input.teachers}, ${sql.json(input.attributes)},
-        ST_SetSRID(ST_MakePoint(${input.longitude}, ${input.latitude}), 4326),
-        ${input.province ?? geo.province}, ${input.city ?? geo.city}, ${input.district ?? geo.district}, ${userId}, ${userId})
+        case when ${input.longitude}::float8 is null then null else ST_SetSRID(ST_MakePoint(${input.longitude}::float8, ${input.latitude}::float8), 4326) end,
+        ${input.province ?? geo.province}, ${input.city ?? geo.city}, ${input.district ?? geo.district}, ${userId}, ${userId}, ${input.latitude === null ? "none" : "manual"})
       returning id::text`.catch(duplicateNpsn);
     return this.get(rows[0]!.id);
   }
@@ -303,7 +306,11 @@ export class LocationRepository {
         address = ${input.address},
         description = ${input.description}, founded_year = ${input.foundedYear}, photo_url = ${input.photoUrl},
         students = ${input.students}, teachers = ${input.teachers}, attributes = ${sql.json(input.attributes)},
-        geom = ST_SetSRID(ST_MakePoint(${input.longitude}, ${input.latitude}), 4326),
+        coord_source = case when ${input.longitude}::float8 is null then 'none'
+                            when lng is distinct from ${input.longitude}::float8 or lat is distinct from ${input.latitude}::float8 then 'manual'
+                            else coord_source end,
+        geocode_note = case when lng is distinct from ${input.longitude}::float8 or lat is distinct from ${input.latitude}::float8 then null else geocode_note end,
+        geom = case when ${input.longitude}::float8 is null then null else ST_SetSRID(ST_MakePoint(${input.longitude}::float8, ${input.latitude}::float8), 4326) end,
         province = ${input.province ?? geo.province}, city = ${input.city ?? geo.city}, district = ${input.district ?? geo.district},
         updated_by = ${userId}, version = version + 1, updated_at = now()
       where id = ${id} and version = ${version}
@@ -313,6 +320,13 @@ export class LocationRepository {
       if (exists.length === 0) throw notFound("Lokasi tidak ditemukan.");
       throw conflict("Data ini sudah diubah orang lain. Muat ulang untuk melihat versi terbaru.");
     }
+    return this.get(id);
+  }
+
+  /** Menandai koordinat hasil pencarian otomatis sebagai sudah diperiksa. */
+  async confirmCoords(id: string, userId: string | null): Promise<Location> {
+    const rows = await this.sql`update locations set coord_source = 'manual', geocode_note = null, updated_by = ${userId}, version = version + 1, updated_at = now() where id = ${id} and geom is not null returning id`;
+    if (rows.length === 0) throw notFound("Lokasi tidak ditemukan atau belum punya koordinat.");
     return this.get(id);
   }
 

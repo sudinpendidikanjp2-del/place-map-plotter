@@ -257,7 +257,7 @@ test("impor CSV: baris valid masuk, baris salah dicatat, batch bisa dibatalkan",
 test("impor tanpa kolom wajib gagal dengan pesan jelas", async () => {
   const editor = await h.client("editor");
   const batch = (await editor.json("/api/imports", { method: "POST", json: { filename: "salah.csv", defaultKind: "aset" } })).body;
-  const r = await editor.json(`/api/imports/${batch.id}/file`, { method: "PUT", body: "judul,warna\nx,y\n" });
+  const r = await editor.json(`/api/imports/${batch.id}/file`, { method: "PUT", body: "warna,ukuran\nx,y\n" });
   assert.equal(r.status, 400);
   assert.match(r.body.error.message, /Kolom wajib/);
   assert.equal((await editor.json(`/api/imports/${batch.id}`)).body.status, "gagal");
