@@ -9,7 +9,8 @@
   },
   "workspaces": [
     "packages/*",
-    "apps/*"
+    "apps/server",
+    "apps/web"
   ],
   "scripts": {
     "dev:server": "npm run dev -w @peta/server",

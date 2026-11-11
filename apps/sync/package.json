@@ -1,0 +1,15 @@
+{
+  "name": "@peta/sync",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Pekerja terjadwal yang menarik data satuan pendidikan dari portal Dapodik lewat otomasi peramban dan mengirimnya ke Peta Sekolah.",
+  "type": "module",
+  "scripts": {
+    "start": "node src/run.mjs",
+    "dry": "node src/run.mjs --dry",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.63.0"
+  }
+}

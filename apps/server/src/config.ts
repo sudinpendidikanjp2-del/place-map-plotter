@@ -8,13 +8,22 @@ export interface Config {
   /** Kunci dan ID peta untuk web. Dikirim lewat /api/config saat runtime, bukan ditanam saat build. */
   mapsKey: string;
   mapId: string;
+  /** Kunci server Google (Places dan Static Maps), tidak pernah dikirim ke peramban. */
+  serverKey: string | null;
+  placesEndpoint: string;
+  /** Folder penyimpanan gambar lokasi. Harus berupa volume yang dicadangkan. */
+  mediaDir: string;
+  /** Batas pencarian koordinat otomatis per hari (setiap pencarian memakai kuota Google berbayar). */
+  geocodeDailyLimit: number;
+  /** Bila true, server mencari koordinat sendiri secara berkala sampai batas harian. */
+  geocodeAuto: boolean;
   webDist: string;
   maxUploadBytes: number;
   dbPoolSize: number;
 }
 
-function int(name: string, fallback: number): number {
-  const raw = process.env[name];
+function int(name: string, fallback: number, env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env[name];
   if (raw === undefined || raw === "") return fallback;
   const n = Number(raw);
   if (!Number.isInteger(n) || n <= 0) throw new Error(`Variabel ${name} harus bilangan bulat positif, diterima "${raw}".`);
@@ -26,15 +35,20 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const databaseUrl = env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL belum diatur. Contoh: postgres://pengguna:sandi@localhost:5432/peta");
   return {
-    port: int("PORT", 3000),
+    port: int("PORT", 3000, env),
     databaseUrl,
     secureCookies: env.COOKIE_SECURE !== "false" && env.NODE_ENV === "production",
     allowedOrigins: (env.ALLOWED_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean),
-    staticMapsKey: env.STATIC_MAPS_KEY || null,
+    staticMapsKey: env.GOOGLE_SERVER_KEY || env.STATIC_MAPS_KEY || null,
     mapsKey: env.GOOGLE_MAPS_KEY ?? "",
     mapId: env.GOOGLE_MAP_ID || "DEMO_MAP_ID",
+    serverKey: env.GOOGLE_SERVER_KEY || env.STATIC_MAPS_KEY || null,
+    placesEndpoint: env.PLACES_ENDPOINT || "https://places.googleapis.com/v1/places:searchText",
+    mediaDir: env.MEDIA_DIR || "./media",
+    geocodeDailyLimit: int("GEOCODE_DAILY_LIMIT", 500, env),
+    geocodeAuto: env.GEOCODE_AUTO === "true",
     webDist: env.WEB_DIST ?? new URL("../../web/dist", import.meta.url).pathname,
-    maxUploadBytes: int("MAX_UPLOAD_MB", 2048) * 1024 * 1024,
-    dbPoolSize: int("DB_POOL_SIZE", 10),
+    maxUploadBytes: int("MAX_UPLOAD_MB", 2048, env) * 1024 * 1024,
+    dbPoolSize: int("DB_POOL_SIZE", 10, env),
   };
 }

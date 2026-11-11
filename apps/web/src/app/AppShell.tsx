@@ -38,6 +38,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: "/data", label: "Data", icon: "table", show: true },
     { to: "/impor", label: "Impor", icon: "upload", show: can("editor") },
     { to: "/laporan", label: "Laporan", icon: "report", show: true },
+    { to: "/sinkronisasi", label: "Sinkronisasi", icon: "clock", show: can("admin") },
     { to: "/admin", label: "Admin", icon: "users", show: can("admin") },
   ];
   const visible = items.filter((i) => i.show);
@@ -50,7 +51,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <span aria-hidden="true" className="grid size-7 place-items-center rounded-lg bg-navy text-[13px] font-bold text-accent">
             P
           </span>
-          <span className="hidden sm:inline">{APP_NAME}</span>
+          <span className="hidden whitespace-nowrap xl:inline">{APP_NAME}</span>
         </Link>
 
         <nav aria-label="Utama" className="ml-2 hidden gap-1 rounded-full bg-surface-2 p-1 md:flex">

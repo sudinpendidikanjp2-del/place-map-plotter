@@ -62,6 +62,22 @@ function MapScreen({ config }: { config: MapsConfig }) {
   const [mapType, setMapType] = useState<"roadmap" | "hybrid">("roadmap");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [labels, setLabels] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("peta:label") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleLabels = () =>
+    setLabels((v) => {
+      try {
+        localStorage.setItem("peta:label", v ? "0" : "1");
+      } catch {
+        /* penyimpanan tidak tersedia, pilihan berlaku untuk sesi ini */
+      }
+      return !v;
+    });
   const [form, setForm] = useState<{ location: Location | null; at?: { lat: number; lng: number } } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [route, setRoute] = useState<{ open: boolean; stops: Stop[] }>({ open: false, stops: [] });
@@ -106,11 +122,24 @@ function MapScreen({ config }: { config: MapsConfig }) {
   const inRoute = selected ? stops.some((s) => s.id === selected.id) : false;
   const toggleRoute = () => {
     if (!selected) return;
+    const { id, name, latitude: lat, longitude: lng } = selected;
+    if (lat === null || lng === null) return;
     setRoute((r) => ({
       open: true,
-      stops: inRoute ? r.stops.filter((s) => s.id !== selected.id) : r.stops.length >= 27 ? r.stops : [...r.stops, { id: selected.id, name: selected.name, lat: selected.latitude, lng: selected.longitude }],
+      stops: inRoute ? r.stops.filter((s) => s.id !== id) : r.stops.length >= 27 ? r.stops : [...r.stops, { id, name, lat, lng }],
     }));
   };
+
+  async function confirmCoords() {
+    if (!selected) return;
+    try {
+      setSelected(await api.confirmCoords(selected.id));
+      setRefreshKey((k) => k + 1);
+      toast.ok("Koordinat ditandai sudah benar.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Gagal menyimpan.");
+    }
+  }
 
   async function remove() {
     if (!selected) return;
@@ -125,7 +154,7 @@ function MapScreen({ config }: { config: MapsConfig }) {
     }
   }
 
-  const activeCount = [filter.kind, filter.category, filter.province, filter.city, filter.district, filter.q, filter.circle, filter.polygon].filter(Boolean).length;
+  const activeCount = [filter.kind, filter.category, filter.level, filter.province, filter.city, filter.district, filter.q, filter.circle, filter.polygon].filter(Boolean).length;
   const drawing = mode !== "none";
 
   return (
@@ -143,13 +172,13 @@ function MapScreen({ config }: { config: MapsConfig }) {
         minZoom={3}
         className="size-full"
       >
-        <ClusterLayer filter={filter} refreshKey={refreshKey} selectedId={selectedId} onSelect={select} onViewport={setViewport} onStatus={onStatus} />
+        <ClusterLayer filter={filter} refreshKey={refreshKey} labels={labels} selectedId={selectedId} onSelect={select} onViewport={setViewport} onStatus={onStatus} />
         <ShapeOverlay {...(filter.circle ? { circle: filter.circle } : {})} {...(filter.polygon ? { polygon: filter.polygon } : {})} />
         <DrawingLayer mode={mode} handle={draw} onShape={applyShape} onCancel={() => setMode("none")} onAdd={(at) => { setMode("none"); setForm({ location: null, at }); }} />
         <FitToFilter filter={filter} skip={Boolean(selectedId)} />
         <FocusSelected location={selected} />
       </Map>
-      <MapTools mapType={mapType} onMapType={setMapType} />
+      <MapTools mapType={mapType} onMapType={setMapType} labels={labels} onLabels={toggleLabels} />
       {route.open && <RoutePanelSlot stops={stops} onChange={(s) => setRoute((r) => ({ ...r, stops: s }))} onClose={() => setRoute((r) => ({ ...r, open: false }))} />}
 
       {/* Lapisan kontrol melayang di atas peta */}
@@ -236,11 +265,12 @@ function MapScreen({ config }: { config: MapsConfig }) {
             onEdit={() => setForm({ location: selected })}
             onDelete={() => setConfirmDelete(true)}
             onToggleRoute={toggleRoute}
+            onConfirmCoords={() => void confirmCoords()}
           />
         )}
         {layer.truncated && (
           <p role="status" className="pointer-events-auto self-end rounded-control bg-surface px-3 py-1.5 text-[13px] shadow-float">
-            Terlalu banyak titik di area ini. Perbesar atau persempit dengan filter untuk melihat semuanya.
+            {labels ? "Terlalu banyak titik untuk diberi label di area ini. Perbesar atau persempit dengan filter, atau matikan label untuk melihat cluster." : "Terlalu banyak titik di area ini. Perbesar atau persempit dengan filter untuk melihat semuanya."}
           </p>
         )}
       </div>
@@ -283,7 +313,7 @@ function RoutePanelSlot(props: { stops: Stop[]; onChange: (s: Stop[]) => void; o
   );
 }
 
-function MapTools({ mapType, onMapType }: { mapType: "roadmap" | "hybrid"; onMapType: (t: "roadmap" | "hybrid") => void }) {
+function MapTools({ mapType, onMapType, labels, onLabels }: { mapType: "roadmap" | "hybrid"; onMapType: (t: "roadmap" | "hybrid") => void; labels: boolean; onLabels: () => void }) {
   const map = useMap("main");
   const toast = useToast();
   const [full, setFull] = useState(false);
@@ -297,6 +327,7 @@ function MapTools({ mapType, onMapType }: { mapType: "roadmap" | "hybrid"; onMap
       <IconButton icon="plus" label="Perbesar" onClick={() => map?.setZoom((map.getZoom() ?? 5) + 1)} />
       <IconButton icon="minus" label="Perkecil" onClick={() => map?.setZoom((map.getZoom() ?? 5) - 1)} />
       <IconButton icon="map" label={mapType === "roadmap" ? "Tampilkan citra satelit" : "Tampilkan peta jalan"} pressed={mapType === "hybrid"} onClick={() => onMapType(mapType === "roadmap" ? "hybrid" : "roadmap")} />
+      <IconButton icon="tag" label={labels ? "Sembunyikan label nama (kelompokkan titik)" : "Tampilkan label nama (tanpa cluster)"} pressed={labels} onClick={onLabels} />
       <IconButton
         icon="locate"
         label="Ke lokasi saya"
@@ -361,7 +392,7 @@ function FocusSelected({ location }: { location: Location | null }) {
   const map = useMap();
   const last = useRef<string | null>(null);
   useEffect(() => {
-    if (!map || !location || last.current === location.id) return;
+    if (!map || !location || location.latitude === null || location.longitude === null || last.current === location.id) return;
     last.current = location.id;
     const b = map.getBounds();
     if (!b || !b.contains({ lat: location.latitude, lng: location.longitude }) || (map.getZoom() ?? 0) < 12) {

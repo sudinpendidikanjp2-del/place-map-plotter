@@ -22,11 +22,11 @@ export interface Client {
   json<T = any>(path: string, init?: RequestInit & { json?: unknown }): Promise<{ status: number; body: T }>;
 }
 
-export async function start(): Promise<Harness> {
+export async function start(env: Record<string, string> = {}): Promise<Harness> {
   const sql = createSql(TEST_URL, 5);
   await migrate(sql);
-  await sql`truncate locations, import_batches, sessions, users restart identity cascade`;
-  const config = loadConfig({ DATABASE_URL: TEST_URL, WEB_DIST: "/nonexistent" } as NodeJS.ProcessEnv);
+  await sql`truncate locations, import_batches, sessions, users, location_images restart identity cascade`;
+  const config = loadConfig({ DATABASE_URL: TEST_URL, WEB_DIST: "/nonexistent", ...env } as NodeJS.ProcessEnv);
   const app = createApp(config, sql, { trustProxy: false });
   await new Promise<void>((r) => app.server.listen(0, r));
   const base = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`;

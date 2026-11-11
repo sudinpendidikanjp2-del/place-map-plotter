@@ -1,5 +1,5 @@
 import type { FieldErrors, LocationInput, Validation } from "./types.ts";
-import { LOCATION_KINDS } from "./types.ts";
+import { LEVELS, LOCATION_KINDS, type Level } from "./types.ts";
 
 const MAX_NAME = 200;
 const MAX_TEXT = 2000;
@@ -45,16 +45,35 @@ export function validateLocationInput(raw: Record<string, unknown>): Validation<
   if (!name) errors.name = "Nama wajib diisi.";
   else if (name.length > MAX_NAME) errors.name = `Nama maksimal ${MAX_NAME} karakter.`;
 
-  const category = text(raw.category) || "Umum";
+
+  const levelRaw = text(raw.level);
+  const level = levelRaw ? (LEVELS.find((l) => l.toLowerCase() === levelRaw.toLowerCase()) ?? null) : null;
+  if (levelRaw && !level) errors.level = `Jenjang tidak dikenal. Pilihan: ${LEVELS.join(", ")}.`;
+
+  const category = text(raw.category) || level || "Umum";
   if (category.length > 100) errors.category = "Kategori maksimal 100 karakter.";
 
-  const latitude = numberOrNaN(raw.latitude);
-  const longitude = numberOrNaN(raw.longitude);
-  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
-    errors.latitude = "Lintang harus berupa angka antara -90 dan 90.";
-  }
-  if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
-    errors.longitude = "Bujur harus berupa angka antara -180 dan 180.";
+  const npsnRaw = text(raw.npsn);
+  if (npsnRaw && !/^\d{8}$/.test(npsnRaw)) errors.npsn = "NPSN harus 8 digit angka.";
+  const npsn = npsnRaw || null;
+
+  const region = (v: unknown): string | null => {
+    const t = text(v).replace(/\s+/g, " ");
+    return t ? t.slice(0, 100) : null;
+  };
+
+  // Koordinat boleh kosong bersama-sama. Bila salah satu terisi, keduanya harus sah.
+  const latBlank = text(raw.latitude) === "";
+  const lngBlank = text(raw.longitude) === "";
+  let latitude: number | null = null;
+  let longitude: number | null = null;
+  if (!(latBlank && lngBlank)) {
+    const la = numberOrNaN(raw.latitude);
+    const lo = numberOrNaN(raw.longitude);
+    if (!Number.isFinite(la) || la < -90 || la > 90) errors.latitude = "Lintang harus berupa angka antara -90 dan 90, atau kosongkan keduanya.";
+    else latitude = la;
+    if (!Number.isFinite(lo) || lo < -180 || lo > 180) errors.longitude = "Bujur harus berupa angka antara -180 dan 180, atau kosongkan keduanya.";
+    else longitude = lo;
   }
 
   const address = text(raw.address) || null;
@@ -90,6 +109,11 @@ export function validateLocationInput(raw: Record<string, unknown>): Validation<
       kind,
       name,
       category,
+      level: level as Level | null,
+      npsn,
+      province: region(raw.province),
+      city: region(raw.city),
+      district: region(raw.district),
       latitude,
       longitude,
       address,

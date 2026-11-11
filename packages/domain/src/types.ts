@@ -7,12 +7,25 @@ export const KIND_LABEL: Record<LocationKind, string> = {
   aset: "Aset",
 };
 
+/** Jenjang pendidikan baku. Nilai lain ditolak agar filter jenjang tidak terpecah oleh variasi penulisan. */
+export const LEVELS = ["PAUD", "KB", "TK", "TPA", "SPS", "SD", "SMP", "SMA", "SMK", "SLB", "SDLB", "SMPLB", "SMALB", "MI", "MTs", "MA", "PKBM", "SKB"] as const;
+export type Level = (typeof LEVELS)[number];
+
 export interface LocationInput {
   kind: LocationKind;
   name: string;
   category: string;
-  latitude: number;
-  longitude: number;
+  /** Jenjang, hanya bermakna untuk sekolah. */
+  level: Level | null;
+  /** Nomor Pokok Sekolah Nasional (8 digit). Dipakai sebagai kunci pembaruan dari Dapodik. */
+  npsn: string | null;
+  /** Wilayah eksplisit. Bila kosong, diurai dari alamat. */
+  province: string | null;
+  city: string | null;
+  district: string | null;
+  /** Kosong bila belum diketahui. Lokasi tanpa koordinat tidak tampil di peta. */
+  latitude: number | null;
+  longitude: number | null;
   address: string | null;
   description: string | null;
   foundedYear: number | null;
@@ -22,12 +35,22 @@ export interface LocationInput {
   attributes: Record<string, string>;
 }
 
+export interface LocationImage {
+  id: string;
+  width: number;
+  height: number;
+  caption: string | null;
+}
+
+export type CoordSource = "manual" | "import" | "geocoded" | "none";
+
 export interface Location extends LocationInput {
   id: string;
-  province: string | null;
-  city: string | null;
-  district: string | null;
+  /** geocoded berarti koordinat dicari otomatis dari nama dan perlu diperiksa. */
+  coordSource: CoordSource;
+  geocodeNote: string | null;
   version: number;
+  images: LocationImage[];
   createdAt: string;
   updatedAt: string;
 }
@@ -59,6 +82,9 @@ export interface BBox {
 export interface LocationFilter {
   kind?: LocationKind;
   category?: string;
+  level?: Level;
+  /** none: belum punya koordinat. geocoded: koordinat perkiraan dari pencarian otomatis. */
+  coords?: "none" | "geocoded";
   province?: string;
   city?: string;
   district?: string;

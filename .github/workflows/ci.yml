@@ -45,3 +45,24 @@ jobs:
         run: npm test
       - name: Build web
         run: npm run build
+
+  sync-worker:
+    name: Pekerja sinkronisasi
+    # Playwright hanya mendukung rilis Ubuntu tertentu. ubuntu-latest sudah 26.04, yang belum didukung.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/sync/package-lock.json
+      - name: Pasang dependensi dan Chromium
+        working-directory: apps/sync
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Tes pekerja
+        working-directory: apps/sync
+        run: npm test

@@ -26,21 +26,23 @@ interface Route {
   handler: Handler;
   /** `null` berarti publik. */
   minRole: UserRole | "login" | null;
+  /** Boleh diakses dengan token API (pekerja terjadwal) selain sesi login. */
+  token: boolean;
 }
 
 export class Router {
   private routes: Route[] = [];
 
-  add(method: string, path: string, minRole: Route["minRole"], handler: Handler): this {
-    this.routes.push({ method, parts: path.split("/").filter(Boolean), handler, minRole });
+  add(method: string, path: string, minRole: Route["minRole"], handler: Handler, opts: { token?: boolean } = {}): this {
+    this.routes.push({ method, parts: path.split("/").filter(Boolean), handler, minRole, token: opts.token ?? false });
     return this;
   }
 
-  get = (path: string, minRole: Route["minRole"], h: Handler) => this.add("GET", path, minRole, h);
-  post = (path: string, minRole: Route["minRole"], h: Handler) => this.add("POST", path, minRole, h);
-  put = (path: string, minRole: Route["minRole"], h: Handler) => this.add("PUT", path, minRole, h);
-  patch = (path: string, minRole: Route["minRole"], h: Handler) => this.add("PATCH", path, minRole, h);
-  delete = (path: string, minRole: Route["minRole"], h: Handler) => this.add("DELETE", path, minRole, h);
+  get = (path: string, minRole: Route["minRole"], h: Handler, opts?: { token?: boolean }) => this.add("GET", path, minRole, h, opts);
+  post = (path: string, minRole: Route["minRole"], h: Handler, opts?: { token?: boolean }) => this.add("POST", path, minRole, h, opts);
+  put = (path: string, minRole: Route["minRole"], h: Handler, opts?: { token?: boolean }) => this.add("PUT", path, minRole, h, opts);
+  patch = (path: string, minRole: Route["minRole"], h: Handler, opts?: { token?: boolean }) => this.add("PATCH", path, minRole, h, opts);
+  delete = (path: string, minRole: Route["minRole"], h: Handler, opts?: { token?: boolean }) => this.add("DELETE", path, minRole, h, opts);
 
   match(method: string, pathname: string): { route: Route; params: Record<string, string> } | "method" | null {
     const parts = pathname.split("/").filter(Boolean);

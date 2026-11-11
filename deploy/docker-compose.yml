@@ -45,8 +45,11 @@ services:
       TRUST_PROXY: "true"
       GOOGLE_MAPS_KEY: ${GOOGLE_MAPS_KEY:-}
       GOOGLE_MAP_ID: ${GOOGLE_MAP_ID:-}
-      STATIC_MAPS_KEY: ${STATIC_MAPS_KEY:-}
+      GOOGLE_SERVER_KEY: ${GOOGLE_SERVER_KEY:-}
+      MEDIA_DIR: /data/media
       DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+    volumes:
+      - media:/data/media
 
   caddy:
     image: caddy:2
@@ -63,7 +66,22 @@ services:
       - caddy_data:/data
       - caddy_config:/config
 
+  # Pekerja sinkronisasi Dapodik. Dijalankan terjadwal: docker compose --profile sync run --rm sync
+  sync:
+    profiles: ["sync"]
+    image: ${SYNC_IMAGE:-ghcr.io/sudinpendidikanjp2-del/place-map-plotter-sync:latest}
+    build:
+      context: ..
+      dockerfile: apps/sync/Dockerfile
+    environment:
+      PETA_URL: ${PETA_URL:-}
+      PETA_TOKEN: ${PETA_TOKEN:-}
+    volumes:
+      - sync_data:/data
+
 volumes:
+  sync_data:
+  media:
   pgdata:
   caddy_data:
   caddy_config:

@@ -57,6 +57,29 @@ Cara mencapainya:
 
 Catatan: filter lingkaran 5 km pada 10 juta lokasi masih 1,4 detik karena data uji menaruh sekitar 800 ribu titik dalam satu lingkaran itu. Pada sebaran nyata jauh lebih ringan, tetapi belum diukur.
 
+**Pembaruan v6 (permintaan lanjutan)**
+
+| Permintaan | Hasil |
+|---|---|
+| Filter kecamatan dan jenjang | Jenjang jadi kolom tersendiri (`level`, daftar baku) dan dimensi pra-agregasi, jadi tetap secepat cluster biasa. Kecamatan kini bisa dipilih langsung setelah provinsi, tanpa memilih kota. Kolom wilayah dari berkas impor dipakai apa adanya. |
+| Cari titik dari nama tempat | Di form tambah dan ubah lokasi. Server memanggil Google Places (New) dengan kunci server (`GOOGLE_SERVER_KEY`), dibatasi 30 pencarian per menit per pengguna. Menguji dengan server Places palsu; **belum diuji dengan Google asli**. |
+| Label nama dan mode tanpa cluster | Tombol label di peta menampilkan setiap titik dengan namanya (maksimal 1.500 titik per area, ada pemberitahuan bila terpotong). Pilihan diingat di peramban. |
+| Gambar lokasi | Hingga 8 gambar per lokasi, disimpan di volume `media` (ikut dicadangkan oleh `backup.sh`). Gambar dikecilkan di peramban (1600 px dan thumbnail 400 px) dan EXIF dibuang. Server memeriksa isi berkas, bukan klaim klien. Berkas yatim disapu setiap hari. |
+| Tarik data dari Dapodik | **Tidak otomatis penuh.** API portal baru memerlukan token dan dilindungi WAF, sehingga tidak ditembus. Tersedia: impor CSV dengan kolom Dapodik dikenali dan pembaruan berdasarkan NPSN. Lihat `docs/DAPODIK.md`. |
+
+Benchmark 10 juta lokasi setelah jenjang ditambahkan (setelah `VACUUM ANALYZE`): cluster 2 sampai 4 ms, ringkasan 5 ms, daftar 13 ms, pencarian 131 ms, filter lingkaran 5 km 1,8 detik (data uji sangat padat). Migrasi 006 pada 10 juta baris memakan 16 menit dan menambah ukuran tabel, lihat `deploy/README.md`.
+
+Pengujian: 11 tes domain dan 26 tes server lulus (termasuk impor gaya Dapodik, unggah gambar, pencarian tempat, dan konsistensi pra-agregasi dengan jenjang). Skrip peramban `scripts/e2e/fitur.cjs` menguji alur filter, cari tempat, gambar, dan label.
+
+**Pembaruan v7: sinkronisasi Dapodik**
+
+- Lokasi boleh belum punya koordinat (`geom` boleh kosong, kolom `coord_source`: manual, import, geocoded, none). Pra-agregasi hanya menghitung yang bertitik. Pencarian titik otomatis lewat Google Places dengan kuota harian dan penanda perkiraan.
+- Token API (hash saja yang disimpan, bisa dicabut) hanya berlaku untuk rute impor dan riwayat sinkronisasi, tanpa cookie dan tanpa pemeriksaan CSRF.
+- Riwayat sinkronisasi (`sync_runs`) dan layar Sinkronisasi dengan peringatan bila lebih dari 10 hari tanpa penarikan berhasil.
+- Koreksi: respons `detail-sekolah` Dapodik **memuat lintang dan bujur** (dikonfirmasi dari halaman yang disimpan pengguna). Pekerja mengimpornya langsung, dan hanya yang kosong atau tidak valid menurut aturan portal (nol, di luar Indonesia) dicari lewat Google Places.
+- `apps/sync`: pekerja Playwright (dari skrip pengguna) dengan normalisasi wilayah dan jenjang, cache, penjaga hasil menyimpang (tolak bila di bawah 70% penarikan sebelumnya), dan pelaporan. Diuji terhadap portal palsu dan terhadap server asli. **Belum dijalankan terhadap portal Dapodik asli.**
+- Pengujian: 32 tes server, 8 tes pekerja, dan skrip peramban `scripts/e2e/sinkronisasi.cjs` lulus.
+
 **Belum dikerjakan atau berbeda dari PRD**
 - **Pencarian tempat (Places) dan impor batch nama tempat dari aplikasi lama tidak dipindahkan.** Keduanya memakai Places API berkuota dan tidak cocok untuk jutaan baris. Impor besar memakai CSV berkoordinat. Bisa ditambahkan bila diperlukan.
 - Kunci Maps web kini diberikan saat runtime lewat `/api/config` (`GOOGLE_MAPS_KEY`, `GOOGLE_MAP_ID`), bukan saat build, agar image Docker yang sama bisa dipakai di mana saja.

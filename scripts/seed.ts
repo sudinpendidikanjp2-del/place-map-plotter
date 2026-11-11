@@ -61,6 +61,7 @@ try {
                                   (x.j ->> 'lat')::float8 + (random() - 0.5) * 2 * (x.j ->> 'spread')::float8), 4326) as geom
       ) d`;
   }
+  await sql`update locations set level = category where kind = 'sekolah' and level is null`;
   await sql`analyze locations`;
   const [{ n }] = await sql<{ n: number }[]>`select count(*)::int as n from locations`;
   console.log(`Data uji siap: ${n.toLocaleString("id-ID")} lokasi.`);

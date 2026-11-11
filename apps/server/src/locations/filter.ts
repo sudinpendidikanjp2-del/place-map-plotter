@@ -1,4 +1,4 @@
-import { LOCATION_KINDS, type BBox, type LocationFilter, type LocationKind } from "@peta/domain";
+import { LEVELS, LOCATION_KINDS, type BBox, type Level, type LocationFilter, type LocationKind } from "@peta/domain";
 import { badRequest } from "../http/errors.ts";
 
 function num(v: string | null, name: string): number | undefined {
@@ -35,6 +35,16 @@ export function parseFilter(q: URLSearchParams): LocationFilter {
   }
   const category = str(q.get("category"), 100);
   if (category) filter.category = category;
+  const level = str(q.get("level"), 20);
+  if (level) {
+    if (!(LEVELS as readonly string[]).includes(level)) throw badRequest("Jenjang tidak dikenal.");
+    filter.level = level as Level;
+  }
+  const coords = q.get("coords");
+  if (coords) {
+    if (coords !== "none" && coords !== "geocoded") throw badRequest("Parameter coords harus none atau geocoded.");
+    filter.coords = coords;
+  }
   const province = str(q.get("province"), 100);
   if (province) filter.province = province;
   const city = str(q.get("city"), 100);

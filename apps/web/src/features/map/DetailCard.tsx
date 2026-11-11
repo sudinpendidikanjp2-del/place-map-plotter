@@ -4,6 +4,7 @@ import { Button, IconButton } from "../../shared/ui/primitives.tsx";
 import { Icon } from "../../shared/ui/icons.tsx";
 import { formatNumber } from "../../shared/lib/format.ts";
 import { KindBadge } from "../locations/kind.tsx";
+import { Gallery } from "../locations/Gallery.tsx";
 
 export function DetailCard({
   location,
@@ -13,6 +14,7 @@ export function DetailCard({
   onEdit,
   onDelete,
   onToggleRoute,
+  onConfirmCoords,
 }: {
   location: Location;
   canEdit: boolean;
@@ -21,6 +23,7 @@ export function DetailCard({
   onEdit: () => void;
   onDelete: () => void;
   onToggleRoute: () => void;
+  onConfirmCoords: () => void;
 }) {
   const [photoFailed, setPhotoFailed] = useState(false);
   const region = [location.district, location.city, location.province].filter(Boolean).join(", ");
@@ -28,7 +31,7 @@ export function DetailCard({
   const isSchool = location.kind === "sekolah";
   return (
     <aside aria-label={`Detail ${location.name}`} className="rise pointer-events-auto flex max-h-[62dvh] w-full flex-col overflow-hidden rounded-float border border-line bg-surface shadow-float md:max-h-[calc(100dvh-9rem)] md:w-96">
-      {location.photoUrl && !photoFailed && (
+      {location.images.length === 0 && location.photoUrl && !photoFailed && (
         <img src={location.photoUrl} alt={`Foto ${location.name}`} loading="lazy" referrerPolicy="no-referrer" onError={() => setPhotoFailed(true)} className="h-40 w-full shrink-0 object-cover" />
       )}
       <div className="flex items-start gap-3 p-4 pb-2">
@@ -36,14 +39,16 @@ export function DetailCard({
         <div className="min-w-0 flex-1">
           <h2 className="text-base font-semibold leading-snug">{location.name}</h2>
           <p className="text-[13px] text-ink-2">
-            {KIND_LABEL[location.kind]} · {location.category}
+            {[KIND_LABEL[location.kind], location.level, location.category !== location.level ? location.category : null].filter(Boolean).join(" · ")}
             {location.foundedYear ? ` · berdiri ${location.foundedYear}` : ""}
+            {location.npsn ? ` · NPSN ${location.npsn}` : ""}
           </p>
         </div>
         <IconButton icon="close" label="Tutup detail" onClick={onClose} />
       </div>
 
       <div className="flex flex-col gap-3 overflow-y-auto px-4 pb-4">
+        <Gallery images={location.images} name={location.name} />
         {isSchool && (location.students !== null || location.teachers !== null) && (
           <dl className="grid grid-cols-2 gap-2">
             <div className="rounded-control bg-surface-2 px-3 py-2">
@@ -63,9 +68,24 @@ export function DetailCard({
           </p>
         )}
         {region && location.address && <p className="text-[13px] text-ink-2">Wilayah: {region}</p>}
-        <p className="num text-[13px] text-ink-2">
-          {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
-        </p>
+        {location.latitude === null || location.longitude === null ? (
+          <p className="rounded-control bg-surface-2 px-3 py-2 text-[13px] text-ink-2">Belum ada koordinat, jadi lokasi ini tidak tampil di peta. Tambahkan lewat Ubah.</p>
+        ) : (
+          <p className="num text-[13px] text-ink-2">
+            {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
+          </p>
+        )}
+        {location.coordSource === "geocoded" && (
+          <div role="note" className="rounded-control border border-accent bg-accent/15 px-3 py-2 text-[13px]">
+            <p className="font-medium">Koordinat perkiraan</p>
+            <p className="text-ink-2">Dicari otomatis dari nama tempat{location.geocodeNote ? `: ${location.geocodeNote}` : ""}. Periksa letaknya di peta.</p>
+            {canEdit && (
+              <Button className="mt-2" icon="check" onClick={onConfirmCoords}>
+                Tandai sudah benar
+              </Button>
+            )}
+          </div>
+        )}
         {location.description && <p>{location.description}</p>}
         {attrs.length > 0 && (
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[13px]">
@@ -78,7 +98,7 @@ export function DetailCard({
           </dl>
         )}
         <div className="flex flex-wrap gap-2 pt-1">
-          <Button variant={inRoute ? "primary" : "secondary"} icon="route" onClick={onToggleRoute}>
+          <Button variant={inRoute ? "primary" : "secondary"} icon="route" disabled={location.latitude === null} onClick={onToggleRoute}>
             {inRoute ? "Keluarkan dari rute" : "Tambah ke rute"}
           </Button>
           {canEdit && (

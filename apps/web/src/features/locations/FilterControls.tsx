@@ -1,4 +1,4 @@
-import { KIND_LABEL, LOCATION_KINDS, hasActiveFilter } from "@peta/domain";
+import { KIND_LABEL, LOCATION_KINDS, hasActiveFilter, type Level } from "@peta/domain";
 import { api } from "../../data/api.ts";
 import { useFilter } from "../../app/filter.tsx";
 import { useDebounced, useResource } from "../../shared/lib/hooks.ts";
@@ -38,7 +38,23 @@ export function FilterControls({ layout = "row" }: { layout?: "row" | "stack" })
           </Chip>
         ))}
       </div>
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Koordinat">
+        <Chip active={filter.coords === "none"} onClick={() => patch({ coords: filter.coords === "none" ? undefined : "none" })}>
+          Tanpa koordinat
+        </Chip>
+        <Chip active={filter.coords === "geocoded"} onClick={() => patch({ coords: filter.coords === "geocoded" ? undefined : "geocoded" })}>
+          Koordinat perkiraan
+        </Chip>
+      </div>
       <Input aria-label="Cari nama atau alamat" placeholder="Cari nama atau alamat" value={text} onChange={(e) => setText(e.target.value)} className={layout === "row" ? "w-full sm:w-56" : ""} />
+      <Select aria-label="Jenjang" value={filter.level ?? ""} onChange={(e) => patch({ level: (e.target.value || undefined) as Level | undefined })} className={layout === "row" ? "w-full sm:w-44" : ""}>
+        <option value="">Semua jenjang</option>
+        {f?.levels.map((l) => (
+          <option key={l.value} value={l.value}>
+            {l.value} ({l.count})
+          </option>
+        ))}
+      </Select>
       <Select aria-label="Kategori" value={filter.category ?? ""} onChange={(e) => patch({ category: e.target.value })} className={layout === "row" ? "w-full sm:w-52" : ""}>
         <option value="">Semua kategori</option>
         {f?.categories.map((c) => (
@@ -55,7 +71,7 @@ export function FilterControls({ layout = "row" }: { layout?: "row" | "stack" })
           </option>
         ))}
       </Select>
-      <Select aria-label="Kota atau kabupaten" value={filter.city ?? ""} disabled={!filter.province} onChange={(e) => patch({ city: e.target.value })} className={layout === "row" ? "w-full sm:w-44" : ""}>
+      <Select aria-label="Kota atau kabupaten" value={filter.city ?? ""} disabled={!filter.province} onChange={(e) => patch({ city: e.target.value })} className={layout === "row" ? "w-full sm:w-56" : ""}>
         <option value="">{filter.province ? "Semua kota/kabupaten" : "Pilih provinsi dulu"}</option>
         {f?.cities.map((c) => (
           <option key={c.value} value={c.value}>
@@ -63,8 +79,8 @@ export function FilterControls({ layout = "row" }: { layout?: "row" | "stack" })
           </option>
         ))}
       </Select>
-      <Select aria-label="Kecamatan" value={filter.district ?? ""} disabled={!filter.city} onChange={(e) => patch({ district: e.target.value })} className={layout === "row" ? "w-full sm:w-40" : ""}>
-        <option value="">{filter.city ? "Semua kecamatan" : "Pilih kota dulu"}</option>
+      <Select aria-label="Kecamatan" value={filter.district ?? ""} disabled={!filter.province} onChange={(e) => patch({ district: e.target.value })} className={layout === "row" ? "w-full sm:w-52" : ""}>
+        <option value="">{filter.province ? "Semua kecamatan" : "Pilih provinsi dulu"}</option>
         {f?.districts.map((d) => (
           <option key={d.value} value={d.value}>
             {d.value}

@@ -17,10 +17,15 @@ export function ClusterBubble({ count }: { count: number }) {
   );
 }
 
-export function PointMarker({ feature, selected }: { feature: ClusterFeature; selected: boolean }) {
+export function PointMarker({ feature, selected, label }: { feature: ClusterFeature; selected: boolean; label?: boolean }) {
   return (
-    <div className={cn("rounded-full transition-transform duration-150", selected ? "scale-125 ring-4 ring-accent" : "hover:scale-110")} title={`${KIND_LABEL[feature.kind ?? "sekolah"]}: ${feature.name ?? ""}`}>
-      <KindBadge kind={feature.kind ?? "sekolah"} size={30} className="border-2 border-white shadow-float" />
+    <div className="flex flex-col items-center" title={`${KIND_LABEL[feature.kind ?? "sekolah"]}: ${feature.name ?? ""}`}>
+      <div className={cn("rounded-full transition-transform duration-150", selected ? "scale-125 ring-4 ring-accent" : "hover:scale-110")}>
+        <KindBadge kind={feature.kind ?? "sekolah"} size={label ? 24 : 30} className="border-2 border-white shadow-float" />
+      </div>
+      {label && feature.name && (
+        <span className="mt-0.5 max-w-40 truncate rounded-md bg-surface px-1.5 py-0.5 text-[12px] font-medium leading-tight text-ink shadow-[0_1px_3px_rgb(11_31_75/0.3)]">{feature.name}</span>
+      )}
     </div>
   );
 }

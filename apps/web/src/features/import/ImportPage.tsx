@@ -126,7 +126,7 @@ export function ImportPage() {
     <div className="mx-auto flex max-w-4xl flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Impor data</h1>
-        <p className="text-ink-2">Unggah berkas CSV berisi sekolah, fasilitas, atau aset. Berkas diproses bertahap di server, ukuran besar tidak masalah.</p>
+        <p className="text-ink-2">Unggah berkas CSV berisi sekolah, fasilitas, atau aset, termasuk ekspor dari Dapodik atau Data Referensi. Baris dengan NPSN yang sudah ada memperbarui data lama, jadi mengimpor ulang tidak menggandakan. Berkas diproses bertahap di server, ukuran besar tidak masalah.</p>
       </div>
 
       <section className="rounded-card border border-line bg-surface p-4 md:p-5" aria-label="Unggah berkas">
@@ -251,9 +251,10 @@ export function ImportPage() {
         {phase === "done" && result && (
           <div className="rise mt-5 rounded-card border border-line bg-surface-2 p-4" role="status">
             <h2 className="font-semibold">Impor selesai</h2>
-            <dl className="mt-2 grid grid-cols-3 gap-3">
+            <dl className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Stat label="Baris dibaca" value={result.total} />
-              <Stat label="Masuk" value={result.inserted} tone="ok" />
+              <Stat label="Baru" value={result.inserted} tone="ok" />
+              <Stat label="Diperbarui (NPSN sama)" value={result.updated} />
               <Stat label="Dilewati" value={result.failed} tone={result.failed ? "danger" : undefined} />
             </dl>
             {result.errors.length > 0 && (
@@ -284,7 +285,7 @@ export function ImportPage() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">{b.filename}</p>
                   <p className="text-[13px] text-ink-2">
-                    {formatDate(b.createdAt)} · {STATUS_LABEL[b.status]} · <span className="num">{formatNumber(b.inserted)}</span> masuk, <span className="num">{formatNumber(b.failed)}</span> dilewati
+                    {formatDate(b.createdAt)} · {STATUS_LABEL[b.status]} · <span className="num">{formatNumber(b.inserted)}</span> baru, <span className="num">{formatNumber(b.updated)}</span> diperbarui, <span className="num">{formatNumber(b.failed)}</span> dilewati
                   </p>
                 </div>
                 {b.status !== "dibatalkan" && b.inserted > 0 && (
