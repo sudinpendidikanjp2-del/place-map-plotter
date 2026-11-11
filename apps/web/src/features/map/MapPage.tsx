@@ -22,9 +22,17 @@ import { RoutePanel, type Stop } from "./RoutePanel.tsx";
 const INDONESIA = { lat: -2.5, lng: 118 };
 
 export function MapPage() {
+  const [failure, setFailure] = useState<string | null>(null);
+  useEffect(() => {
+    // Google memanggil fungsi global ini bila kunci ditolak (referrer salah, API belum aktif, atau tagihan belum diatur).
+    (window as unknown as { gm_authFailure?: () => void }).gm_authFailure = () =>
+      setFailure("Google Maps menolak kunci API. Periksa pembatasan referrer, API yang aktif, dan penagihan di Google Cloud Console.");
+    return () => void delete (window as unknown as { gm_authFailure?: () => void }).gm_authFailure;
+  }, []);
   if (!mapsKey) return <MapUnavailable />;
+  if (failure) return <MapUnavailable reason={failure} />;
   return (
-    <APIProvider apiKey={mapsKey} language="id" region="ID">
+    <APIProvider apiKey={mapsKey} language="id" region="ID" onError={() => setFailure("Google Maps gagal dimuat. Periksa koneksi internet dan kunci API.")}>
       <MapScreen />
     </APIProvider>
   );
@@ -52,6 +60,9 @@ function MapScreen() {
   const draw = useRef<DrawHandle>(null);
   const canEdit = can("editor");
   const categories = useMemo(() => facets.data?.categories.map((c) => c.category) ?? [], [facets.data]);
+  // Data kosong sama sekali: peta tetap tampil, tetapi pengguna diberi jalan untuk mulai.
+  const anyData = useResource((s) => api.extent({}, s), [refreshKey]);
+  const isEmpty = anyData.status === "ready" && anyData.data.count === 0;
 
   // Memuat lokasi terpilih dari tautan (?lokasi=ID), termasuk dari pencarian dan layar Data.
   useEffect(() => {
@@ -180,6 +191,25 @@ function MapScreen() {
         )}
       </div>
 
+      {isEmpty && (
+        <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center px-4">
+          <div className="pointer-events-auto max-w-sm rounded-float border border-line bg-surface p-5 text-center shadow-float">
+            <h2 className="text-base font-semibold">Belum ada lokasi</h2>
+            <p className="mt-1 text-ink-2">{canEdit ? "Impor berkas CSV atau klik tombol tambah di peta untuk menaruh titik pertama." : "Belum ada data yang bisa ditampilkan. Minta penyunting untuk menambahkannya."}</p>
+            {canEdit && (
+              <div className="mt-4 flex justify-center gap-2">
+                <Button variant="primary" icon="upload" onClick={() => navigate("/impor")}>
+                  Impor CSV
+                </Button>
+                <Button icon="plus" onClick={() => setMode("add")}>
+                  Tambah di peta
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Alat gambar di sisi kiri bawah */}
       <div className="absolute bottom-20 left-2 z-10 flex flex-col gap-1 rounded-float border border-line bg-surface p-1 shadow-float md:bottom-6 md:left-4" role="toolbar" aria-label="Alat peta">
         <IconButton icon="circle" label="Filter dengan lingkaran" pressed={mode === "circle"} onClick={() => setMode(mode === "circle" ? "none" : "circle")} />
@@ -255,9 +285,9 @@ function MapTools({ mapType, onMapType }: { mapType: "roadmap" | "hybrid"; onMap
     return () => document.removeEventListener("fullscreenchange", h);
   }, []);
   return (
-    <div className="absolute right-2 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-1 rounded-float border border-line bg-surface p-1 shadow-float md:right-4" role="toolbar" aria-label="Tampilan peta">
+    <div className="absolute right-2 top-[4.25rem] z-10 flex flex-col gap-1 rounded-float border border-line bg-surface p-1 shadow-float md:right-4 md:top-20" role="toolbar" aria-label="Tampilan peta">
       <IconButton icon="plus" label="Perbesar" onClick={() => map?.setZoom((map.getZoom() ?? 5) + 1)} />
-      <IconButton icon="close" label="Perkecil" className="rotate-45" onClick={() => map?.setZoom((map.getZoom() ?? 5) - 1)} />
+      <IconButton icon="minus" label="Perkecil" onClick={() => map?.setZoom((map.getZoom() ?? 5) - 1)} />
       <IconButton icon="map" label={mapType === "roadmap" ? "Tampilkan citra satelit" : "Tampilkan peta jalan"} pressed={mapType === "hybrid"} onClick={() => onMapType(mapType === "roadmap" ? "hybrid" : "roadmap")} />
       <IconButton
         icon="locate"
@@ -364,15 +394,15 @@ function Stat({ label, value, loading, primary }: { label: string; value: number
   );
 }
 
-function MapUnavailable() {
+function MapUnavailable({ reason }: { reason?: string }) {
   const { navigate } = useRouter();
   return (
     <div className="grid min-h-dvh place-items-center px-4 pt-20">
       <div className="max-w-lg rounded-float border border-line bg-surface p-6 shadow-float">
         <h1 className="text-xl font-semibold">Peta belum bisa ditampilkan</h1>
         <p className="mt-2 text-ink-2">
-          Kunci Google Maps belum diatur. Isi <code className="rounded bg-surface-2 px-1 font-mono text-[13px]">VITE_GOOGLE_MAPS_KEY</code> dan{" "}
-          <code className="rounded bg-surface-2 px-1 font-mono text-[13px]">VITE_GOOGLE_MAP_ID</code> di berkas <code className="rounded bg-surface-2 px-1 font-mono text-[13px]">.env</code>, lalu bangun ulang aplikasi.
+          {reason ? reason : <>Kunci Google Maps belum diatur. Isi <code className="rounded bg-surface-2 px-1 font-mono text-[13px]">VITE_GOOGLE_MAPS_KEY</code> dan{" "}
+          <code className="rounded bg-surface-2 px-1 font-mono text-[13px]">VITE_GOOGLE_MAP_ID</code> di berkas <code className="rounded bg-surface-2 px-1 font-mono text-[13px]">.env</code>, lalu bangun ulang aplikasi.</>}
         </p>
         <p className="mt-2 text-ink-2">Layar lain tetap bisa dipakai tanpa peta.</p>
         <div className="mt-4 flex gap-2">

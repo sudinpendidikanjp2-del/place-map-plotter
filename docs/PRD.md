@@ -1,6 +1,6 @@
 # PRD: Redesign dan Refactor CSV Pinpoint Map Plotter
 
-Status: **Draft v4 untuk diskusi** (belum ada kode aplikasi yang diubah)
+Status: **v5, sudah diimplementasikan** (lihat bagian 0). Bagian 1 sampai 14 adalah PRD asli yang menjadi acuan.
 Mode antislop: **DURING** (pilihan sesi ini)
 Skill acuan: `antislop`, `better-interface` (hanya `better-interface` terpasang)
 
@@ -17,6 +17,50 @@ Keputusan yang sudah diambil:
 | 7 | Data lama di Firestore **boleh dibuang** |
 | 8 | `jspdf` boleh dipertahankan, disesuaikan dengan fitur |
 | 9 | Arah desain: empat tangkapan layar terlampir sebagai **inspirasi**, bukan untuk ditiru |
+
+---
+
+## 0. Status implementasi (v5)
+
+Keputusan tambahan dari pemilik produk: warna **biru dongker dan kuning**, data tentang **sekolah, fasilitas, aset** (jumlah murid dan guru), skema data mengikuti praktik terbaik, data lama di Firestore dibuang, skala pengguna belum diketahui.
+
+**Sudah dibangun dan diverifikasi**
+
+| Area | Hasil | Bukti |
+|---|---|---|
+| Paket `domain` | Validasi, parser CSV bertahap, pemetaan kolom, parser alamat, filter | 11 tes unit lulus |
+| Server | Auth (scrypt, sesi, peran, pembatas laju, CSRF), CRUD dengan kontrol versi, cluster PostGIS, daftar kursor, pencarian trigram, filter lingkaran dan area, impor COPY streaming dengan batch yang bisa dibatalkan, laporan, ekspor CSV streaming, cadangan NDJSON, proxy Static Maps | 18 tes integrasi terhadap PostgreSQL nyata lulus |
+| Web | Layar Peta, Data, Impor, Laporan, Admin, Masuk. Tema terang dan gelap, pencarian cepat `Ctrl K`, rute, gambar bentuk, ekspor CSV, PDF, gambar peta | Klik-tembus di Chromium, uji keyboard, uji peta dengan Google Maps tiruan |
+| Aksesibilitas | Semua pasangan warna lolos WCAG AA (24 pasangan), fokus terlihat di semua perhentian Tab, dialog `<dialog>` bawaan, tanpa overflow di 390px | Skrip audit |
+| Deploy | Dockerfile, Compose (PostGIS, aplikasi, Caddy), cadangan dan pemulihan | **Belum dijalankan**: tidak ada Docker di lingkungan pengembangan |
+
+**Skema data (praktik terbaik):** kolom bertipe untuk atribut yang diagregasi (`students`, `teachers`, `founded_year`), `kind` (sekolah, fasilitas, aset) dan `category` bebas, atribut lain di `attributes jsonb`, wilayah (`province`, `city`, `district`) diurai saat simpan dan diindeks, geometri `Point` dengan indeks GiST, `version` untuk kontrol konflik, `import_batch_id` untuk membatalkan impor.
+
+**Hasil benchmark, 1 juta lokasi sintetis** (mesin 4 vCPU, 16 GB, PostgreSQL 16, satu klien serial). Data uji berpusat di 8 kota sehingga lebih padat daripada data nyata.
+
+| Kasus | Dingin p95 | Hangat p95 | Target v4 |
+|---|---|---|---|
+| Cluster seluruh Indonesia (zoom 5) | 542 ms | 3 ms | < 200 ms **belum tercapai** dingin |
+| Cluster satu provinsi (zoom 9) | 303 ms | 3 ms | belum tercapai dingin |
+| Cluster satu kota (zoom 13, 125 ribu titik di area) | 224 ms | 200 ms | hampir |
+| Daftar 50 baris dengan filter | 13 ms | 4 ms | < 150 ms tercapai |
+| Pencarian teks | 23 ms | 11 ms | < 300 ms tercapai |
+| Filter lingkaran 5 km | 221 ms | 151 ms | tidak ada target |
+| Ringkasan laporan seluruh data | 463 ms | 3 ms | tidak ada target |
+| Impor CSV | 22.800 baris/detik | | ≥ 20.000 tercapai |
+| Ekspor CSV 21 MB | byte pertama 2 ms | | tercapai |
+
+"Dingin" berarti cache hasil kosong. Cache memakai kunci versi data di PostgreSQL (naik otomatis oleh pemicu), sehingga tidak pernah basi dan berlaku lintas replika. Target cluster dingin di bawah 200 ms belum tercapai pada 1 juta baris. Langkah berikutnya bila dibutuhkan: pra-agregasi cluster per zoom (jalur pertumbuhan di `deploy/README.md`). Belum diukur pada 10 juta baris.
+
+Temuan yang membuat perbedaan terbesar: setelah 5 eksekusi PostgreSQL beralih ke rencana generik yang 5 kali lebih lambat untuk kueri peta. Diperbaiki dengan `plan_cache_mode=force_custom_plan`.
+
+**Belum dikerjakan atau berbeda dari PRD**
+- **Pencarian tempat (Places) dan impor batch nama tempat dari aplikasi lama tidak dipindahkan.** Keduanya memakai Places API berkuota dan tidak cocok untuk jutaan baris. Impor besar memakai CSV berkoordinat. Bisa ditambahkan bila diperlukan.
+- Peta diuji dengan Google Maps **tiruan**. Rendering sungguhan, Directions, dan gaya peta belum diverifikasi karena tidak ada kunci API.
+- Ekspor gambar peta dan PDF dengan gambar peta memerlukan `STATIC_MAPS_KEY`. Tanpa kunci, PDF tetap dibuat tanpa gambar.
+- Nama produk "Peta Sekolah" dan penanda huruf "P" adalah **penampung sementara**. Tidak ada logo yang dibuat.
+- Ukuran pengguna dan data sebenarnya belum diketahui, jadi spesifikasi VPS di `deploy/README.md` berupa perkiraan.
+- Skill `better-*` pendamping tidak terpasang, jadi review `better-interface` tidak dijalankan penuh.
 
 ---
 

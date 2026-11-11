@@ -5,6 +5,7 @@ const PATHS = {
   search: "M10.5 4a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13Zm9 15.5-4.2-4.2",
   close: "M6 6l12 12M18 6 6 18",
   plus: "M12 5v14M5 12h14",
+  minus: "M5 12h14",
   edit: "M4 20h4L19 9l-4-4L4 16v4Zm9.5-13.5 4 4",
   trash: "M5 7h14M10 7V5h4v2m-7 0 1 12h8l1-12M10 11v5m4-5v5",
   download: "M12 4v11m-4-4 4 4 4-4M5 19h14",
