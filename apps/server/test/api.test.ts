@@ -87,6 +87,21 @@ test("cluster: jumlah fitur dibatasi dan total tetap sama, zoom dekat menampilka
   assert.equal(bad.status, 400);
 });
 
+test("cache hasil tidak pernah basi: tambah, ubah, dan hapus langsung terlihat di cluster dan ringkasan", async () => {
+  const editor = await h.client("editor");
+  await h.sql`truncate locations restart identity cascade`;
+  const q = "/api/locations/clusters?west=100&south=-10&east=120&north=5&zoom=6";
+  assert.equal((await editor.json(q)).body.total, 0);
+  assert.equal((await editor.json("/api/reports/summary")).body.total, 0);
+  const created = (await editor.json("/api/locations", { method: "POST", json: sampleLocation({ latitude: -6.2, longitude: 106.8, students: 10 }) })).body;
+  assert.equal((await editor.json(q)).body.total, 1);
+  assert.equal((await editor.json("/api/reports/summary")).body.students, 10);
+  await editor.json(`/api/locations/${created.id}`, { method: "PATCH", json: { ...sampleLocation({ students: 99 }), version: created.version } });
+  assert.equal((await editor.json("/api/reports/summary")).body.students, 99);
+  await editor.json(`/api/locations/${created.id}`, { method: "DELETE" });
+  assert.equal((await editor.json(q)).body.total, 0);
+});
+
 test("batas area mengikuti filter dan kosong bila tidak ada data", async () => {
   const admin = await h.client("admin");
   await h.sql`truncate locations restart identity cascade`;

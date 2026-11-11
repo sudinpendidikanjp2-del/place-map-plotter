@@ -1,0 +1,68 @@
+# Jalankan dari folder deploy: docker compose --env-file .env up -d --build
+services:
+  db:
+    image: postgis/postgis:17-3.5
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: peta
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?isi POSTGRES_PASSWORD di .env}
+      POSTGRES_DB: peta
+    # Setelan untuk VPS 4 vCPU / 8 GB RAM. Sesuaikan dengan tabel di deploy/README.md.
+    command: >
+      postgres
+      -c shared_buffers=2GB
+      -c effective_cache_size=5GB
+      -c work_mem=32MB
+      -c maintenance_work_mem=512MB
+      -c max_parallel_workers_per_gather=4
+      -c jit=off
+      -c random_page_cost=1.1
+      -c wal_compression=on
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U peta -d peta"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Tidak ada "ports": basis data hanya bisa dijangkau dari jaringan Compose.
+    shm_size: 1gb
+
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        VITE_GOOGLE_MAPS_KEY: ${VITE_GOOGLE_MAPS_KEY:-}
+        VITE_GOOGLE_MAP_ID: ${VITE_GOOGLE_MAP_ID:-}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: postgres://peta:${POSTGRES_PASSWORD}@db:5432/peta
+      TRUST_PROXY: "true"
+      STATIC_MAPS_KEY: ${STATIC_MAPS_KEY:-}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [app]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?isi DOMAIN di .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

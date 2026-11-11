@@ -9,6 +9,7 @@ type Frag = postgres.PendingQuery<postgres.Row[]>;
 const MAX_BULK_IDS = 10_000;
 const MAX_CLUSTER_FEATURES = 1500;
 const TOTAL_CAP = 100_000;
+const SPATIAL_TOTAL_CAP = 10_000;
 
 /** Zoom ke atas ini tidak lagi dikelompokkan, titik ditampilkan satu per satu. */
 export const INDIVIDUAL_ZOOM = 17;
@@ -20,6 +21,7 @@ function escapeLike(s: string): string {
 export class LocationRepository {
   private readonly sql: Sql;
   private facetCache = new Map<string, { at: number; value: unknown }>();
+  private resultCache = new Map<string, { value: unknown }>();
 
   constructor(sql: Sql) {
     this.sql = sql;
@@ -59,7 +61,7 @@ export class LocationRepository {
   private columns(): Frag {
     return this.sql`
       id::text, kind, name, category, address, description, founded_year, photo_url, students, teachers,
-      attributes, ST_Y(geom) as latitude, ST_X(geom) as longitude, province, city, district,
+      attributes, lat as latitude, lng as longitude, province, city, district,
       version, created_at, updated_at`;
   }
 
@@ -70,37 +72,73 @@ export class LocationRepository {
     return rows[0];
   }
 
+  private async version(): Promise<string> {
+    const rows = await this.sql<{ version: string }[]>`select version::text from data_version`;
+    return rows[0]!.version;
+  }
+
+  /** Hasil mahal dipakai bersama antar pengguna. Kunci memuat versi data, jadi tidak pernah basi. */
+  private async memo<T>(key: string, load: () => Promise<T>): Promise<T> {
+    const full = `${await this.version()}|${key}`;
+    const hit = this.resultCache.get(full);
+    if (hit) {
+      this.resultCache.delete(full);
+      this.resultCache.set(full, hit);
+      return hit.value as T;
+    }
+    const value = await load();
+    this.resultCache.set(full, { value });
+    if (this.resultCache.size > 300) this.resultCache.delete(this.resultCache.keys().next().value!);
+    return value;
+  }
+
   async clusters(f: LocationFilter, zoom: number): Promise<{ features: ClusterFeature[]; total: number; truncated: boolean }> {
     const sql = this.sql;
-    const where = this.where(f);
-    let features: ClusterFeature[];
-    if (zoom >= INDIVIDUAL_ZOOM) {
-      features = await sql<ClusterFeature[]>`
-        select 1 as count, ST_Y(geom) as lat, ST_X(geom) as lng, id::text as id, kind, name
-        from locations ${where} limit ${MAX_CLUSTER_FEATURES + 1}`;
-    } else {
-      // Sel kira-kira 60 piksel pada zoom ini, dengan asal koordinat global agar kluster stabil saat peta digeser.
-      const cell = 84.375 / 2 ** zoom;
-      features = await sql<ClusterFeature[]>`
-        select count(*)::int as count, avg(ST_Y(geom)) as lat, avg(ST_X(geom)) as lng,
-          case when count(*) = 1 then min(id)::text end as id,
-          case when count(*) = 1 then min(kind) end as kind,
-          case when count(*) = 1 then min(name) end as name
-        from locations ${where}
-        group by ST_SnapToGrid(geom, ${cell})
-        order by count(*) desc
-        limit ${MAX_CLUSTER_FEATURES + 1}`;
+    // Sel kira-kira 60 piksel pada zoom ini, dengan asal koordinat global agar kluster stabil saat peta digeser.
+    const cell = 84.375 / 2 ** zoom;
+    let q = f;
+    if (f.bbox) {
+      // Area dibulatkan ke kelipatan sel supaya geseran kecil memakai ulang hasil yang sama.
+      const step = cell * 4;
+      const b = f.bbox;
+      q = {
+        ...f,
+        bbox: {
+          west: Math.max(-180, Math.floor(b.west / step) * step),
+          south: Math.max(-90, Math.floor(b.south / step) * step),
+          east: Math.min(180, Math.ceil(b.east / step) * step),
+          north: Math.min(90, Math.ceil(b.north / step) * step),
+        },
+      };
     }
-    const truncated = features.length > MAX_CLUSTER_FEATURES;
-    if (truncated) features = features.slice(0, MAX_CLUSTER_FEATURES);
-    const total = features.reduce((n, x) => n + x.count, 0);
-    return { features, total, truncated };
+    return this.memo(`clusters|${zoom}|${JSON.stringify(q)}`, async () => {
+      const where = this.where(q);
+      let features: ClusterFeature[];
+      if (zoom >= INDIVIDUAL_ZOOM) {
+        features = await sql<ClusterFeature[]>`
+          select 1 as count, lat, lng, id::text as id, kind, name
+          from locations ${where} limit ${MAX_CLUSTER_FEATURES + 1}`;
+      } else {
+        features = await sql<ClusterFeature[]>`
+          select count(*)::int as count, avg(lat) as lat, avg(lng) as lng,
+            case when count(*) = 1 then min(id)::text end as id,
+            case when count(*) = 1 then min(kind) end as kind,
+            case when count(*) = 1 then min(name) end as name
+          from locations ${where}
+          group by floor(lng / ${cell}::float8), floor(lat / ${cell}::float8)
+          order by count(*) desc
+          limit ${MAX_CLUSTER_FEATURES + 1}`;
+      }
+      const truncated = features.length > MAX_CLUSTER_FEATURES;
+      if (truncated) features = features.slice(0, MAX_CLUSTER_FEATURES);
+      return { features, total: features.reduce((n, x) => n + x.count, 0), truncated };
+    });
   }
 
   /** Batas area semua lokasi yang sesuai filter, dipakai web untuk menyesuaikan tampilan peta. */
   async extent(f: LocationFilter): Promise<{ count: number; bbox: { west: number; south: number; east: number; north: number } | null }> {
     const rows = await this.sql<{ count: number; west: number | null; south: number | null; east: number | null; north: number | null }[]>`
-      select count(*)::int as count, min(ST_X(geom)) as west, min(ST_Y(geom)) as south, max(ST_X(geom)) as east, max(ST_Y(geom)) as north
+      select count(*)::int as count, min(lng) as west, min(lat) as south, max(lng) as east, max(lat) as north
       from locations ${this.where(f)}`;
     const r = rows[0]!;
     if (r.count === 0 || r.west === null || r.south === null || r.east === null || r.north === null) return { count: 0, bbox: null };
@@ -133,8 +171,15 @@ export class LocationRepository {
           : sql`${joiner} id < ${cur.id}`;
     }
     const order = opts.sort === "nama" ? sql`order by locations.name, locations.id` : sql`order by locations.id desc`;
-    const rows = await sql<Location[]>`
-      select ${this.columns()} from locations ${base} ${cursorCond} ${order} limit ${limit + 1}`;
+    const cap = f.circle || f.polygon || f.bbox ? SPATIAL_TOTAL_CAP : TOTAL_CAP;
+    const [rows, counted] = await Promise.all([
+      sql<Location[]>`select ${this.columns()} from locations ${base} ${cursorCond} ${order} limit ${limit + 1}`,
+      opts.cursor
+        ? Promise.resolve(null)
+        : this.memo(`count|${cap}|${JSON.stringify(f)}`, () =>
+            sql<{ n: number }[]>`select count(*)::int as n from (select 1 from locations ${base} limit ${cap + 1}) t`,
+          ),
+    ]);
     const hasMore = rows.length > limit;
     const items = hasMore ? rows.slice(0, limit) : rows;
     const last = items[items.length - 1];
@@ -145,11 +190,10 @@ export class LocationRepository {
 
     let total = 0;
     let totalCapped = false;
-    if (!opts.cursor) {
-      const t = await sql<{ n: number }[]>`select count(*)::int as n from (select 1 from locations ${base} limit ${TOTAL_CAP + 1}) t`;
-      total = t[0]!.n;
-      totalCapped = total > TOTAL_CAP;
-      if (totalCapped) total = TOTAL_CAP;
+    if (counted) {
+      total = counted[0]!.n;
+      totalCapped = total > cap;
+      if (totalCapped) total = cap;
     }
     return { items, nextCursor, total, totalCapped };
   }
@@ -268,6 +312,10 @@ export class LocationRepository {
   }
 
   async summary(f: LocationFilter): Promise<Summary> {
+    return this.memo(`summary|${JSON.stringify(f)}`, () => this.computeSummary(f));
+  }
+
+  private async computeSummary(f: LocationFilter): Promise<Summary> {
     const sql = this.sql;
     const where = this.where(f);
     const [totals, byKind, byCategory, byProvince, perMonth] = await Promise.all([
@@ -303,7 +351,7 @@ export class LocationRepository {
   stream(f: LocationFilter, batch = 2000) {
     const sql = this.sql;
     return sql`
-      select kind, name, category, ST_Y(geom) as latitude, ST_X(geom) as longitude, address, province, city, district,
+      select kind, name, category, lat as latitude, lng as longitude, address, province, city, district,
         founded_year, students, teachers, description, photo_url
       from locations ${this.where(f)} order by id`.cursor(batch);
   }

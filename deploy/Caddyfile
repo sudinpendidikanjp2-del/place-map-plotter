@@ -1,0 +1,14 @@
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:3000 {
+		# Unggahan CSV besar dan ekspor streaming tidak boleh dipotong oleh proxy.
+		flush_interval -1
+		transport http {
+			read_timeout 0
+			write_timeout 0
+		}
+	}
+	request_body {
+		max_size 2GB
+	}
+}
