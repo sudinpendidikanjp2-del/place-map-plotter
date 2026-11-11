@@ -1,0 +1,17 @@
+{
+  "name": "@peta/server",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch --env-file-if-exists=.env src/main.ts",
+    "start": "node --env-file-if-exists=.env src/main.ts",
+    "migrate": "node --env-file-if-exists=.env src/db/migrate-cli.ts",
+    "create-admin": "node --env-file-if-exists=.env src/auth/create-admin-cli.ts",
+    "test": "node --test --test-concurrency=1 test/*.test.ts"
+  },
+  "dependencies": {
+    "@peta/domain": "*",
+    "postgres": "^3.4.5"
+  }
+}
