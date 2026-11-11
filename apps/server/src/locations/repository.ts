@@ -21,6 +21,11 @@ export function canUseCells(f: LocationFilter, zoom: number): boolean {
   return zoom <= CELL_MAX_ZOOM && !f.q && !f.city && !f.district && !f.circle && !f.polygon;
 }
 
+function duplicateNpsn(e: unknown): never {
+  if ((e as { code?: string; constraint_name?: string }).code === "23505") throw conflict("NPSN ini sudah dipakai lokasi lain.");
+  throw e;
+}
+
 function escapeLike(s: string): string {
   return s.replace(/[\\%_]/g, "\\$&");
 }
@@ -39,12 +44,13 @@ export class LocationRepository {
     const c: Frag[] = [];
     if (f.kind) c.push(sql`kind = ${f.kind}`);
     if (f.category) c.push(sql`category = ${f.category}`);
+    if (f.level) c.push(sql`level = ${f.level}`);
     if (f.province) c.push(sql`province = ${f.province}`);
     if (f.city) c.push(sql`city = ${f.city}`);
     if (f.district) c.push(sql`district = ${f.district}`);
     if (f.q) {
       const like = `%${escapeLike(f.q)}%`;
-      c.push(sql`(name ilike ${like} or address ilike ${like})`);
+      c.push(/^\d{8}$/.test(f.q) ? sql`(name ilike ${like} or address ilike ${like} or npsn = ${f.q})` : sql`(name ilike ${like} or address ilike ${like})`);
     }
     if (f.bbox) {
       const b = f.bbox;
@@ -74,7 +80,7 @@ export class LocationRepository {
 
   private columns(): Frag {
     return this.sql`
-      id::text, kind, name, category, address, description, founded_year, photo_url, students, teachers,
+      id::text, kind, name, category, level, npsn, address, description, founded_year, photo_url, students, teachers,
       attributes, lat as latitude, lng as longitude, province, city, district,
       version, created_at, updated_at`;
   }
@@ -83,6 +89,9 @@ export class LocationRepository {
     if (!/^\d+$/.test(id)) throw notFound();
     const rows = await this.sql<Location[]>`select ${this.columns()} from locations where id = ${id}`;
     if (!rows[0]) throw notFound("Lokasi tidak ditemukan.");
+    rows[0].images = await this.sql<Location["images"]>`
+      select id::text, width, height, caption from location_images
+      where location_id = ${id} and ready order by position, id`;
     return rows[0];
   }
 
@@ -106,8 +115,7 @@ export class LocationRepository {
     return value;
   }
 
-  async clusters(f: LocationFilter, zoom: number): Promise<{ features: ClusterFeature[]; total: number; truncated: boolean }> {
-    const sql = this.sql;
+  async clusters(f: LocationFilter, zoom: number, opts: { points?: boolean } = {}): Promise<{ features: ClusterFeature[]; total: number; truncated: boolean }> {
     // Sel kira-kira 60 piksel pada zoom ini, dengan asal koordinat global agar kluster stabil saat peta digeser.
     const cell = 84.375 / 2 ** zoom;
     let q = f;
@@ -125,7 +133,14 @@ export class LocationRepository {
         },
       };
     }
-    return this.memo(`clusters|${zoom}|${JSON.stringify(q)}`, async () => {
+    return this.memo(`clusters|${zoom}|${opts.points ? "p" : "c"}|${JSON.stringify(q)}`, async () => {
+      // Mode titik: tanpa pengelompokan, setiap lokasi dalam area ditampilkan (dibatasi) agar namanya bisa dilabeli.
+      if (opts.points) {
+        const features = await this.clustersLive(q, INDIVIDUAL_ZOOM, cell);
+        const truncated = features.length > MAX_CLUSTER_FEATURES;
+        const out = truncated ? features.slice(0, MAX_CLUSTER_FEATURES) : features;
+        return { features: out, total: out.length, truncated };
+      }
       const features = canUseCells(q, zoom) ? await this.clustersFromCells(q, zoom, cell) : await this.clustersLive(q, zoom, cell);
       const truncated = features.length > MAX_CLUSTER_FEATURES;
       const out = truncated ? features.slice(0, MAX_CLUSTER_FEATURES) : features;
@@ -163,6 +178,7 @@ export class LocationRepository {
     }
     if (f.kind) c.push(sql`kind = ${f.kind}`);
     if (f.category) c.push(sql`category = ${f.category}`);
+    if (f.level) c.push(sql`level = ${f.level}`);
     if (f.province) c.push(sql`province = ${f.province}`);
     const where = c.reduce((a, b) => sql`${a} and ${b}`);
     const rows = await sql<ClusterFeature[]>`
@@ -268,13 +284,13 @@ export class LocationRepository {
     const sql = this.sql;
     const geo = parseAddress(input.address);
     const rows = await sql<{ id: string }[]>`
-      insert into locations (kind, name, category, address, description, founded_year, photo_url, students, teachers,
+      insert into locations (kind, name, category, level, npsn, address, description, founded_year, photo_url, students, teachers,
         attributes, geom, province, city, district, created_by, updated_by)
-      values (${input.kind}, ${input.name}, ${input.category}, ${input.address}, ${input.description}, ${input.foundedYear},
-        ${input.photoUrl}, ${input.students}, ${input.teachers}, ${sql.json(input.attributes)},
+      values (${input.kind}, ${input.name}, ${input.category}, ${input.level}, ${input.npsn}, ${input.address}, ${input.description},
+        ${input.foundedYear}, ${input.photoUrl}, ${input.students}, ${input.teachers}, ${sql.json(input.attributes)},
         ST_SetSRID(ST_MakePoint(${input.longitude}, ${input.latitude}), 4326),
-        ${geo.province}, ${geo.city}, ${geo.district}, ${userId}, ${userId})
-      returning id::text`;
+        ${input.province ?? geo.province}, ${input.city ?? geo.city}, ${input.district ?? geo.district}, ${userId}, ${userId})
+      returning id::text`.catch(duplicateNpsn);
     return this.get(rows[0]!.id);
   }
 
@@ -283,14 +299,15 @@ export class LocationRepository {
     const geo = parseAddress(input.address);
     const rows = await sql<{ id: string }[]>`
       update locations set
-        kind = ${input.kind}, name = ${input.name}, category = ${input.category}, address = ${input.address},
+        kind = ${input.kind}, name = ${input.name}, category = ${input.category}, level = ${input.level}, npsn = ${input.npsn},
+        address = ${input.address},
         description = ${input.description}, founded_year = ${input.foundedYear}, photo_url = ${input.photoUrl},
         students = ${input.students}, teachers = ${input.teachers}, attributes = ${sql.json(input.attributes)},
         geom = ST_SetSRID(ST_MakePoint(${input.longitude}, ${input.latitude}), 4326),
-        province = ${geo.province}, city = ${geo.city}, district = ${geo.district},
+        province = ${input.province ?? geo.province}, city = ${input.city ?? geo.city}, district = ${input.district ?? geo.district},
         updated_by = ${userId}, version = version + 1, updated_at = now()
       where id = ${id} and version = ${version}
-      returning id::text`;
+      returning id::text`.catch(duplicateNpsn);
     if (!rows[0]) {
       const exists = await sql`select 1 from locations where id = ${id}`;
       if (exists.length === 0) throw notFound("Lokasi tidak ditemukan.");
@@ -356,24 +373,27 @@ export class LocationRepository {
     const key = `facets:${scope.province ?? ""}:${scope.city ?? ""}`;
     return this.cached(key, 30_000, async () => {
       const sql = this.sql;
-      const [categories, provinces, cities, districts] = await Promise.all([
+      type Row = { value: string; count: number };
+      const none = Promise.resolve([] as Row[]);
+      // Kategori, jenjang, dan provinsi dibaca dari tabel statistik (ukurannya tidak bergantung pada jumlah lokasi).
+      const [categories, levels, provinces, cities, districts] = await Promise.all([
         sql<{ category: string; count: number }[]>`
-          select category, count(*)::int as count from locations group by category order by count desc, category limit 200`,
-        sql<{ value: string; count: number }[]>`
-          select province as value, count(*)::int as count from locations where province is not null group by province order by province`,
+          select category, sum(n)::int as count from stat_months group by category having sum(n) > 0 order by count desc, category limit 200`,
+        sql<Row[]>`select level as value, sum(n)::int as count from stat_months where level <> '' group by level having sum(n) > 0 order by level`,
+        sql<Row[]>`select province as value, sum(n)::int as count from stat_months where province <> '' group by province having sum(n) > 0 order by province`,
         scope.province
-          ? sql<{ value: string; count: number }[]>`
+          ? sql<Row[]>`
               select city as value, count(*)::int as count from locations
               where province = ${scope.province} and city is not null group by city order by city limit 1000`
-          : Promise.resolve([] as { value: string; count: number }[]),
-        scope.province && scope.city
-          ? sql<{ value: string; count: number }[]>`
+          : none,
+        scope.province
+          ? sql<Row[]>`
               select district as value, count(*)::int as count from locations
-              where province = ${scope.province} and city = ${scope.city} and district is not null
-              group by district order by district limit 1000`
-          : Promise.resolve([] as { value: string; count: number }[]),
+              where province = ${scope.province} ${scope.city ? sql`and city = ${scope.city}` : sql``} and district is not null
+              group by district order by district limit 2000`
+          : none,
       ]);
-      return { categories, provinces, cities, districts };
+      return { categories, levels, provinces, cities, districts };
     });
   }
 
@@ -392,6 +412,7 @@ export class LocationRepository {
       const c: Frag[] = [];
       if (f.kind) c.push(sql`kind = ${f.kind}`);
       if (f.category) c.push(sql`category = ${f.category}`);
+      if (f.level) c.push(sql`level = ${f.level}`);
       if (f.province) c.push(sql`province = ${f.province}`);
       return c;
     };
@@ -479,7 +500,7 @@ export class LocationRepository {
   stream(f: LocationFilter, batch = 2000) {
     const sql = this.sql;
     return sql`
-      select kind, name, category, lat as latitude, lng as longitude, address, province, city, district,
+      select kind, name, npsn, level, category, lat as latitude, lng as longitude, address, province, city, district,
         founded_year, students, teachers, description, photo_url
       from locations ${this.where(f)} order by id`.cursor(batch);
   }

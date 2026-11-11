@@ -9,6 +9,9 @@ mkdir -p "$BACKUP_DIR"
 file="$BACKUP_DIR/peta-$(date +%Y%m%d-%H%M%S).dump"
 docker compose exec -T db pg_dump -U peta -d peta --format=custom --compress=6 > "$file.partial"
 mv "$file.partial" "$file"
-find "$BACKUP_DIR" -name 'peta-*.dump' -mtime +"$KEEP_DAYS" -delete
+# Gambar lokasi ada di volume terpisah dan harus ikut dicadangkan.
+media_file="${file%.dump}-media.tar.gz"
+docker compose exec -T app tar -czf - -C /data/media . > "$media_file.partial" && mv "$media_file.partial" "$media_file"
+find "$BACKUP_DIR" \( -name 'peta-*.dump' -o -name 'peta-*-media.tar.gz' \) -mtime +"$KEEP_DAYS" -delete
 if [ -n "${BACKUP_REMOTE:-}" ]; then rsync -a "$BACKUP_DIR/" "$BACKUP_REMOTE/"; fi
 echo "Cadangan selesai: $file ($(du -h "$file" | cut -f1))"

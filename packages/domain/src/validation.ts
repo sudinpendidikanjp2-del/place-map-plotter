@@ -1,5 +1,5 @@
 import type { FieldErrors, LocationInput, Validation } from "./types.ts";
-import { LOCATION_KINDS } from "./types.ts";
+import { LEVELS, LOCATION_KINDS, type Level } from "./types.ts";
 
 const MAX_NAME = 200;
 const MAX_TEXT = 2000;
@@ -45,8 +45,22 @@ export function validateLocationInput(raw: Record<string, unknown>): Validation<
   if (!name) errors.name = "Nama wajib diisi.";
   else if (name.length > MAX_NAME) errors.name = `Nama maksimal ${MAX_NAME} karakter.`;
 
-  const category = text(raw.category) || "Umum";
+
+  const levelRaw = text(raw.level);
+  const level = levelRaw ? (LEVELS.find((l) => l.toLowerCase() === levelRaw.toLowerCase()) ?? null) : null;
+  if (levelRaw && !level) errors.level = `Jenjang tidak dikenal. Pilihan: ${LEVELS.join(", ")}.`;
+
+  const category = text(raw.category) || level || "Umum";
   if (category.length > 100) errors.category = "Kategori maksimal 100 karakter.";
+
+  const npsnRaw = text(raw.npsn);
+  if (npsnRaw && !/^\d{8}$/.test(npsnRaw)) errors.npsn = "NPSN harus 8 digit angka.";
+  const npsn = npsnRaw || null;
+
+  const region = (v: unknown): string | null => {
+    const t = text(v).replace(/\s+/g, " ");
+    return t ? t.slice(0, 100) : null;
+  };
 
   const latitude = numberOrNaN(raw.latitude);
   const longitude = numberOrNaN(raw.longitude);
@@ -90,6 +104,11 @@ export function validateLocationInput(raw: Record<string, unknown>): Validation<
       kind,
       name,
       category,
+      level: level as Level | null,
+      npsn,
+      province: region(raw.province),
+      city: region(raw.city),
+      district: region(raw.district),
       latitude,
       longitude,
       address,

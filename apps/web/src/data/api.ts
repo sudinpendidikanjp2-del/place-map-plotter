@@ -77,6 +77,7 @@ export interface ImportBatch {
   status: "menunggu" | "berjalan" | "selesai" | "gagal" | "dibatalkan";
   total: number;
   inserted: number;
+  updated: number;
   failed: number;
   errors: { row: number; message: string }[];
   message: string | null;
@@ -86,6 +87,7 @@ export interface ImportBatch {
 
 export interface Facets {
   categories: { category: string; count: number }[];
+  levels: { value: string; count: number }[];
   provinces: { value: string; count: number }[];
   cities: { value: string; count: number }[];
   districts: { value: string; count: number }[];
@@ -105,16 +107,41 @@ export interface MapsConfig {
   mapId: string;
 }
 
+export interface PlaceResult {
+  name: string;
+  address: string | null;
+  latitude: number;
+  longitude: number;
+}
+
 export const api = {
+  places: {
+    search: (q: string, signal?: AbortSignal) => request<{ items: PlaceResult[] }>(`/api/places/search?q=${encodeURIComponent(q)}`, signal ? { signal } : {}),
+  },
+  images: {
+    create: (locationId: string, meta: { mime: string; width: number; height: number }) => request<{ id: string }>(`/api/locations/${locationId}/images`, { method: "POST", json: meta }),
+    upload: async (id: string, variant: "full" | "thumb", blob: Blob) => {
+      let res: Response;
+      try {
+        res = await fetch(`/api/images/${id}/${variant}`, { method: "PUT", credentials: "same-origin", body: blob, headers: { "content-type": blob.type } });
+      } catch {
+        throw new ApiError(0, "network", "Unggahan gambar terputus. Periksa koneksi Anda.");
+      }
+      if (!res.ok) throw await parseError(res);
+    },
+    remove: (id: string) => request<{ ok: true }>(`/api/images/${id}`, { method: "DELETE" }),
+    url: (id: string, variant: "full" | "thumb") => `/api/images/${id}/${variant}`,
+  },
   config: (signal?: AbortSignal) => request<MapsConfig>("/api/config", signal ? { signal } : {}),
   me: (signal?: AbortSignal) => request<{ user: SessionUser }>("/api/auth/me", signal ? { signal } : {}),
   login: (email: string, password: string) => request<{ user: SessionUser }>("/api/auth/login", { method: "POST", json: { email, password } }),
   logout: () => request<{ ok: true }>("/api/auth/logout", { method: "POST" }),
   changePassword: (current: string, next: string) => request<{ ok: true }>("/api/auth/change-password", { method: "POST", json: { current, next } }),
 
-  clusters: (f: LocationFilter, zoom: number, signal: AbortSignal) => {
+  clusters: (f: LocationFilter, zoom: number, signal: AbortSignal, points = false) => {
     const p = filterToParams(f);
     p.set("zoom", String(zoom));
+    if (points) p.set("points", "1");
     return request<{ features: ClusterFeature[]; total: number; truncated: boolean }>(`/api/locations/clusters${qs(p)}`, { signal });
   },
   list: (f: LocationFilter, o: { sort: "baru" | "nama"; limit?: number; cursor?: string | null }, signal?: AbortSignal) => {

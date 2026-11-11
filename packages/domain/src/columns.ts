@@ -6,6 +6,11 @@ export const FIELD_LABEL: Record<MappedField, string> = {
   kind: "Jenis",
   name: "Nama",
   category: "Kategori",
+  level: "Jenjang",
+  npsn: "NPSN",
+  province: "Provinsi",
+  city: "Kota/Kabupaten",
+  district: "Kecamatan",
   latitude: "Lintang",
   longitude: "Bujur",
   address: "Alamat",
@@ -18,16 +23,21 @@ export const FIELD_LABEL: Record<MappedField, string> = {
 
 const SYNONYMS: Record<MappedField, string[]> = {
   kind: ["jenis", "kind", "tipe data", "jenis data"],
-  name: ["nama", "name", "nama lokasi", "nama sekolah", "nama fasilitas", "nama aset", "title", "judul", "label"],
-  category: ["kategori", "category", "tipe", "type", "jenjang", "grup", "group"],
+  name: ["nama", "name", "nama lokasi", "nama satuan pendidikan", "satuan pendidikan", "nama sekolah", "nama fasilitas", "nama aset", "title", "judul", "label"],
+  category: ["kategori", "category", "tipe", "type", "grup", "group"],
+  level: ["jenjang", "jenjang pendidikan", "bentuk pendidikan", "bentuk", "level"],
+  npsn: ["npsn", "nomor pokok sekolah nasional"],
+  province: ["provinsi", "propinsi", "province"],
+  city: ["kabupaten kota", "kota kabupaten", "kabupaten", "kota", "kab kota", "city"],
+  district: ["kecamatan", "district", "kec"],
   latitude: ["latitude", "lat", "lintang", "koordinat y", "y"],
   longitude: ["longitude", "lng", "lon", "long", "bujur", "koordinat x", "x"],
-  address: ["alamat", "address", "lokasi", "tempat"],
+  address: ["alamat", "alamat jalan", "address", "lokasi", "tempat"],
   description: ["keterangan", "deskripsi", "description", "info", "catatan", "notes", "detail"],
   foundedYear: ["tahun berdiri", "tahun didirikan", "tahun", "founded", "tahun resmi", "tahun diresmikan"],
   photoUrl: ["foto", "photo", "gambar", "image", "url foto", "url gambar", "tautan foto"],
-  students: ["jumlah murid", "murid", "siswa", "jumlah siswa", "peserta didik", "students"],
-  teachers: ["jumlah guru", "guru", "pendidik", "teachers"],
+  students: ["jumlah murid", "murid", "siswa", "jumlah siswa", "peserta didik", "jumlah peserta didik", "jumlah pd", "pd", "students"],
+  teachers: ["jumlah guru", "guru", "pendidik", "jumlah ptk", "jumlah gtk", "gtk", "ptk", "teachers"],
 };
 
 export function normalizeHeader(h: string): string {
@@ -72,6 +82,11 @@ export function rowToRaw(
     kind: get("kind") || defaults.kind,
     name: get("name"),
     category: get("category"),
+    level: get("level"),
+    npsn: get("npsn"),
+    province: get("province"),
+    city: get("city"),
+    district: get("district"),
     latitude: get("latitude"),
     longitude: get("longitude"),
     address: get("address"),
@@ -85,6 +100,6 @@ export function rowToRaw(
 }
 
 export const EXPORT_HEADERS = [
-  "Jenis", "Nama", "Kategori", "Lintang", "Bujur", "Alamat", "Provinsi", "Kota/Kabupaten", "Kecamatan",
+  "Jenis", "Nama", "NPSN", "Jenjang", "Kategori", "Lintang", "Bujur", "Alamat", "Provinsi", "Kota/Kabupaten", "Kecamatan",
   "Tahun berdiri", "Jumlah murid", "Jumlah guru", "Keterangan", "Tautan foto",
 ] as const;

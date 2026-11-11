@@ -22,6 +22,9 @@ import { createUser, listUsers, updateUser, validateUserFields } from "./auth/us
 import { LocationRepository } from "./locations/repository.ts";
 import { parseBBox, parseFilter } from "./locations/filter.ts";
 import { ImportService } from "./imports/service.ts";
+import { ImageService } from "./images/service.ts";
+import { ImageStore, type Variant } from "./images/store.ts";
+import { searchPlaces } from "./places/search.ts";
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -82,6 +85,7 @@ function idList(raw: unknown): string[] | undefined {
 export interface App {
   server: Server;
   repo: LocationRepository;
+  images: ImageService;
   close(): Promise<void>;
 }
 
@@ -89,6 +93,8 @@ export function createApp(config: Config, sql: Sql, opts: { trustProxy?: boolean
   const trustProxy = opts.trustProxy ?? process.env.TRUST_PROXY === "true";
   const repo = new LocationRepository(sql);
   const imports = new ImportService(sql, config.maxUploadBytes);
+  const images = new ImageService(sql, new ImageStore(config.mediaDir));
+  const placesLimiter = new RateLimiter(30, 60_000);
   const loginLimiter = new RateLimiter(10, 15 * 60_000);
   const ipLimiter = new RateLimiter(60, 15 * 60_000);
   const router = new Router();
@@ -174,7 +180,8 @@ export function createApp(config: Config, sql: Sql, opts: { trustProxy?: boolean
     if (!Number.isInteger(zoom) || zoom < 0 || zoom > 22) throw badRequest("Parameter zoom harus bilangan bulat 0 sampai 22.");
     const filter = parseFilter(q);
     if (!filter.bbox) throw badRequest("Parameter west, south, east, north wajib diisi.");
-    sendJson(c.res, 200, await repo.clusters(filter, zoom), { "cache-control": "private, max-age=15" });
+    const points = q.get("points") === "1";
+    sendJson(c.res, 200, await repo.clusters(filter, zoom, { points }), { "cache-control": "private, max-age=15" });
   });
 
   router.get("/api/locations/extent", "viewer", async (c) => sendJson(c.res, 200, await repo.extent(parseFilter(c.url.searchParams)), { "cache-control": "private, max-age=15" }));
@@ -219,7 +226,9 @@ export function createApp(config: Config, sql: Sql, opts: { trustProxy?: boolean
   });
 
   router.delete("/api/locations/:id", "editor", async (c) => {
+    const imageIds = await images.idsForLocations([c.params.id!]);
     await repo.remove(c.params.id!);
+    await Promise.all(imageIds.map((i) => images.store.remove(i)));
     repo.invalidate();
     sendJson(c.res, 200, { ok: true });
   });
@@ -243,7 +252,9 @@ export function createApp(config: Config, sql: Sql, opts: { trustProxy?: boolean
     const body = await readJson<Record<string, unknown>>(c.req, 2_000_000);
     const ids = idList(body.ids);
     const sel = ids ? { ids } : { filter: filterFromBody(body.filter) };
+    const imageIds = ids ? await images.idsForLocations(ids) : [];
     const deleted = await repo.bulkDelete(sel);
+    await Promise.all(imageIds.map((i) => images.store.remove(i)));
     repo.invalidate();
     sendJson(c.res, 200, { deleted });
   });
@@ -286,7 +297,7 @@ export function createApp(config: Config, sql: Sql, opts: { trustProxy?: boolean
       if (!open) break;
       let out = "";
       for (const r of rows as Record<string, unknown>[]) {
-        out += `${toCsvLine([r.kind, r.name, r.category, r.latitude, r.longitude, r.address, r.province, r.city, r.district, r.foundedYear, r.students, r.teachers, r.description, r.photoUrl])}\r\n`;
+        out += `${toCsvLine([r.kind, r.name, r.npsn, r.level, r.category, r.latitude, r.longitude, r.address, r.province, r.city, r.district, r.foundedYear, r.students, r.teachers, r.description, r.photoUrl])}\r\n`;
       }
       if (!c.res.write(out)) await new Promise<void>((resolve) => c.res.once("drain", resolve).once("close", resolve));
     }
@@ -294,7 +305,7 @@ export function createApp(config: Config, sql: Sql, opts: { trustProxy?: boolean
   });
 
   router.get("/api/export/static-map", "viewer", async (c) => {
-    if (!config.staticMapsKey) throw new HttpError(503, "not_configured", "Gambar peta belum tersedia: STATIC_MAPS_KEY belum diatur di server.");
+    if (!config.staticMapsKey) throw new HttpError(503, "not_configured", "Gambar peta belum tersedia: GOOGLE_SERVER_KEY belum diatur di server.");
     const q = c.url.searchParams;
     const filter = parseFilter(q);
     const bbox = parseBBox(q);
@@ -326,7 +337,7 @@ export function createApp(config: Config, sql: Sql, opts: { trustProxy?: boolean
     let open = true;
     c.res.on("close", () => (open = false));
     const cursor = sql`
-      select kind, name, category, address, description, founded_year, photo_url, students, teachers, attributes,
+      select kind, name, category, level, npsn, address, province, city, district, description, founded_year, photo_url, students, teachers, attributes,
         ST_Y(geom) as latitude, ST_X(geom) as longitude
       from locations order by id`.cursor(2000);
     for await (const rows of cursor) {
@@ -335,6 +346,44 @@ export function createApp(config: Config, sql: Sql, opts: { trustProxy?: boolean
       if (!c.res.write(out)) await new Promise<void>((resolve) => c.res.once("drain", resolve).once("close", resolve));
     }
     c.res.end();
+  });
+
+  // ---------- Pencarian tempat (geokoding) ----------
+  router.get("/api/places/search", "editor", async (c) => {
+    if (!placesLimiter.take(me(c).id)) throw tooMany("Terlalu banyak pencarian tempat. Coba lagi satu menit lagi.");
+    const results = await searchPlaces({ key: config.serverKey, endpoint: config.placesEndpoint, query: c.url.searchParams.get("q") ?? "" });
+    sendJson(c.res, 200, { items: results });
+  });
+
+  // ---------- Gambar lokasi ----------
+  router.post("/api/locations/:id/images", "editor", async (c) => {
+    const body = await readJson<{ mime?: unknown; width?: unknown; height?: unknown; caption?: unknown }>(c.req, 10_000);
+    sendJson(c.res, 201, await images.create(c.params.id!, { mime: body.mime, width: body.width, height: body.height, caption: body.caption }, me(c).id));
+  });
+  for (const variant of ["full", "thumb"] as const) {
+    router.put(`/api/images/:id/${variant}`, "editor", async (c) => {
+      const result = await images.receive(c.params.id!, variant as Variant, c.req);
+      sendJson(c.res, 200, result);
+    });
+  }
+  router.get("/api/images/:id/:variant", "viewer", async (c) => {
+    const variant = c.params.variant;
+    if (variant !== "full" && variant !== "thumb") throw notFound("Gambar tidak ditemukan.");
+    const meta = await images.meta(c.params.id!);
+    if (!meta.ready) throw notFound("Gambar belum selesai diunggah.");
+    const size = await images.store.size(meta.id, variant);
+    if (size === null) throw notFound("Berkas gambar tidak ditemukan.");
+    const etag = `"${meta.id}-${variant}-${size}"`;
+    if (c.req.headers["if-none-match"] === etag) {
+      c.res.writeHead(304, { etag });
+      return void c.res.end();
+    }
+    c.res.writeHead(200, { "content-type": meta.mime, "content-length": size, etag, "cache-control": "private, max-age=31536000, immutable" });
+    images.store.open(meta.id, variant).pipe(c.res);
+  });
+  router.delete("/api/images/:id", "editor", async (c) => {
+    await images.remove(c.params.id!);
+    sendJson(c.res, 200, { ok: true });
   });
 
   // ---------- Berkas statik ----------
@@ -416,13 +465,19 @@ export function createApp(config: Config, sql: Sql, opts: { trustProxy?: boolean
 
   const sweep = setInterval(() => void purgeExpiredSessions(sql).catch(() => {}), 3_600_000);
   sweep.unref();
+  // Berkas gambar yatim (lokasi dihapus massal) dibersihkan sekali saat mulai dan setiap hari.
+  const imageSweep = setInterval(() => void images.sweep().catch(() => {}), 86_400_000);
+  imageSweep.unref();
+  setTimeout(() => void images.sweep().catch(() => {}), 30_000).unref();
 
   return {
     server,
     repo,
+    images,
     close: () =>
       new Promise<void>((resolve) => {
         clearInterval(sweep);
+        clearInterval(imageSweep);
         server.close(() => resolve());
         server.closeAllConnections();
       }),

@@ -16,6 +16,7 @@ export type LayerStatus = "loading" | "ready" | "error";
 export function ClusterLayer({
   filter,
   refreshKey,
+  labels,
   selectedId,
   onSelect,
   onViewport,
@@ -23,6 +24,8 @@ export function ClusterLayer({
 }: {
   filter: LocationFilter;
   refreshKey: number;
+  /** Tampilkan nama dan jangan kelompokkan titik. */
+  labels: boolean;
   selectedId: string | null;
   onSelect: (id: string) => void;
   onViewport: (v: Viewport) => void;
@@ -49,7 +52,7 @@ export function ClusterLayer({
       const c = new AbortController();
       ctl.current = c;
       cb.current.onStatus("loading");
-      api.clusters({ ...filter, bbox }, z, c.signal).then(
+      api.clusters({ ...filter, bbox }, z, c.signal, labels).then(
         (r) => {
           if (c.signal.aborted) return;
           setFeatures(r.features);
@@ -74,7 +77,7 @@ export function ClusterLayer({
       ctl.current?.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, filterKey, refreshKey, nonce]);
+  }, [map, filterKey, refreshKey, nonce, labels]);
 
   function zoomInto(f: ClusterFeature) {
     if (!map) return;
@@ -91,7 +94,7 @@ export function ClusterLayer({
           </AdvancedMarker>
         ) : f.id ? (
           <AdvancedMarker key={`p-${f.id}`} position={{ lat: f.lat, lng: f.lng }} title={f.name ?? "Lokasi"} zIndex={f.id === selectedId ? 10 : 1} onClick={() => onSelect(f.id!)}>
-            <PointMarker feature={f} selected={f.id === selectedId} />
+            <PointMarker feature={f} selected={f.id === selectedId} label={labels} />
           </AdvancedMarker>
         ) : null,
       )}

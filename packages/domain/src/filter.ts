@@ -5,6 +5,7 @@ export function filterToParams(f: LocationFilter): URLSearchParams {
   const q = new URLSearchParams();
   if (f.kind) q.set("kind", f.kind);
   if (f.category) q.set("category", f.category);
+  if (f.level) q.set("level", f.level);
   if (f.province) q.set("province", f.province);
   if (f.city) q.set("city", f.city);
   if (f.district) q.set("district", f.district);
@@ -21,5 +22,5 @@ export function filterToParams(f: LocationFilter): URLSearchParams {
 }
 
 export function hasActiveFilter(f: LocationFilter): boolean {
-  return Boolean(f.kind || f.category || f.province || f.city || f.district || f.q || f.circle || f.polygon);
+  return Boolean(f.kind || f.category || f.level || f.province || f.city || f.district || f.q || f.circle || f.polygon);
 }

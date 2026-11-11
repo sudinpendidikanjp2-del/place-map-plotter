@@ -44,11 +44,15 @@ Data uji sintetis (bukan data nyata): `node scripts/seed.ts 5000 --reset`
 
 Tes server memakai basis data `peta_test` (bawaan `postgres://sekolah:dev@localhost:5432/peta_test`) dan **mengosongkan tabelnya**. Jangan arahkan ke data nyata.
 
+## Data Dapodik
+
+Portal Dapodik baru (dapo.kemendikdasmen.go.id) tidak menyediakan API publik tanpa token, dan dilindungi WAF yang menantang klien otomatis. Aplikasi ini sengaja tidak menembusnya. Jalur yang tersedia: impor CSV hasil ekspor resmi (kolom Dapodik seperti NPSN, Nama Satuan Pendidikan, Bentuk Pendidikan, Kecamatan, Lintang, Bujur, Jumlah PD, Jumlah PTK dikenali otomatis, dan NPSN yang sama memperbarui data lama), atau API resmi bila instansi Anda memperoleh aksesnya (lihat docs/DAPODIK.md).
+
 ## Prasyarat Google Cloud
 
 1. **Kunci web** (Maps JavaScript API, Places jika dipakai, Directions API): batasi *HTTP referrers* ke domain Anda.
 2. **ID peta** (Map Management) dengan gaya diredam, lalu isi `GOOGLE_MAP_ID`. `AdvancedMarker` mensyaratkannya.
-3. **Kunci server** (Static Maps API) untuk ekspor gambar peta: batasi *IP addresses* ke IP VPS, isi `STATIC_MAPS_KEY`.
+3. **Kunci server** (Static Maps API untuk ekspor gambar peta, dan Places API (New) untuk mencari titik dari nama tempat): batasi *IP addresses* ke IP VPS, isi `GOOGLE_SERVER_KEY`. `STATIC_MAPS_KEY` lama tetap dibaca.
 
 ## Rilis otomatis
 

@@ -34,6 +34,8 @@ const PATHS = {
   student: "M12 4 3 8.5 12 13l9-4.5L12 4Zm-6 6.5V15c0 1.5 2.7 3 6 3s6-1.5 6-3v-4.5",
   image: "M5 5h14v14H5V5Zm0 11 4-4 3 3 3-3 4 4M9 9.5h.01",
   clock: "M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm0-12v4l3 2",
+  tag: "M4 12V5h7l9 9-7 7-9-9Zm4-4.5h.01",
+  chevronLeft: "m14 7-5 5 5 5",
   undo: "M9 8 4 12l5 4m-5-4h10a5 5 0 0 1 0 10h-3",
 } as const;
 

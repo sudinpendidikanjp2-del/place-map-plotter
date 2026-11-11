@@ -4,6 +4,7 @@ import { Button, IconButton } from "../../shared/ui/primitives.tsx";
 import { Icon } from "../../shared/ui/icons.tsx";
 import { formatNumber } from "../../shared/lib/format.ts";
 import { KindBadge } from "../locations/kind.tsx";
+import { Gallery } from "../locations/Gallery.tsx";
 
 export function DetailCard({
   location,
@@ -28,7 +29,7 @@ export function DetailCard({
   const isSchool = location.kind === "sekolah";
   return (
     <aside aria-label={`Detail ${location.name}`} className="rise pointer-events-auto flex max-h-[62dvh] w-full flex-col overflow-hidden rounded-float border border-line bg-surface shadow-float md:max-h-[calc(100dvh-9rem)] md:w-96">
-      {location.photoUrl && !photoFailed && (
+      {location.images.length === 0 && location.photoUrl && !photoFailed && (
         <img src={location.photoUrl} alt={`Foto ${location.name}`} loading="lazy" referrerPolicy="no-referrer" onError={() => setPhotoFailed(true)} className="h-40 w-full shrink-0 object-cover" />
       )}
       <div className="flex items-start gap-3 p-4 pb-2">
@@ -36,14 +37,16 @@ export function DetailCard({
         <div className="min-w-0 flex-1">
           <h2 className="text-base font-semibold leading-snug">{location.name}</h2>
           <p className="text-[13px] text-ink-2">
-            {KIND_LABEL[location.kind]} · {location.category}
+            {[KIND_LABEL[location.kind], location.level, location.category !== location.level ? location.category : null].filter(Boolean).join(" · ")}
             {location.foundedYear ? ` · berdiri ${location.foundedYear}` : ""}
+            {location.npsn ? ` · NPSN ${location.npsn}` : ""}
           </p>
         </div>
         <IconButton icon="close" label="Tutup detail" onClick={onClose} />
       </div>
 
       <div className="flex flex-col gap-3 overflow-y-auto px-4 pb-4">
+        <Gallery images={location.images} name={location.name} />
         {isSchool && (location.students !== null || location.teachers !== null) && (
           <dl className="grid grid-cols-2 gap-2">
             <div className="rounded-control bg-surface-2 px-3 py-2">

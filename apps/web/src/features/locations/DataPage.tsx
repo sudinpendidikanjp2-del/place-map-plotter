@@ -225,11 +225,11 @@ export function DataPage() {
                   {canEdit && <KindBadge kind={l.kind} size={28} />}
                   <span className="min-w-0">
                     <span className="block truncate font-medium">{l.name}</span>
-                    <span className="block truncate text-[13px] text-ink-2 md:hidden">{[l.category, l.city].filter(Boolean).join(" · ")}</span>
+                    <span className="block truncate text-[13px] text-ink-2 md:hidden">{[l.level ?? l.category, l.city].filter(Boolean).join(" · ")}</span>
                     <span className="hidden truncate text-[13px] text-ink-2 md:block">{l.address ?? "Alamat belum diisi"}</span>
                   </span>
                 </button>
-                <span className="hidden truncate md:block">{l.category}</span>
+                <span className="hidden truncate md:block">{[l.level, l.category !== l.level ? l.category : null].filter(Boolean).join(" · ")}</span>
                 <span className="hidden truncate text-ink-2 md:block">{[l.district, l.city, l.province].filter(Boolean).join(", ") || "Belum diketahui"}</span>
                 <span className="num hidden text-right md:block">{formatNumber(l.students)}</span>
                 <span className="num hidden text-right md:block">{formatNumber(l.teachers)}</span>

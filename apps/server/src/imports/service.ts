@@ -21,6 +21,8 @@ export interface ImportBatch {
   status: "menunggu" | "berjalan" | "selesai" | "gagal" | "dibatalkan";
   total: number;
   inserted: number;
+  /** Baris ber-NPSN yang sudah ada dan diperbarui. */
+  updated: number;
   failed: number;
   errors: { row: number; message: string }[];
   message: string | null;
@@ -32,7 +34,7 @@ const CHUNK_ROWS = 20_000;
 const MAX_STORED_ERRORS = 200;
 
 const BATCH_COLUMNS = (sql: Sql) => sql`
-  id::text, filename, default_kind, status, total, inserted, failed, errors, message, created_at, finished_at`;
+  id::text, filename, default_kind, status, total, inserted, updated, failed, errors, message, created_at, finished_at`;
 
 function copyField(v: string | number | null): string {
   if (v === null) return "\\N";
@@ -43,6 +45,8 @@ interface StagedRow {
   kind: string;
   name: string;
   category: string;
+  level: string | null;
+  npsn: string | null;
   address: string | null;
   description: string | null;
   foundedYear: number | null;
@@ -107,6 +111,8 @@ export class ImportService {
     const errors: ImportBatch["errors"] = [];
     let total = 0;
     let inserted = 0;
+    let added = 0;
+    let updated = 0;
     let failed = 0;
     let rowNumber = 0;
     let headers: string[] | null = null;
@@ -132,32 +138,51 @@ export class ImportService {
       await sql.begin(async (tx) => {
         await tx`
           create temp table stg (
-            kind text, name text, category text, address text, description text, founded_year int, photo_url text,
+            kind text, name text, category text, level text, npsn text, address text, description text, founded_year int, photo_url text,
             students int, teachers int, attributes text, lat float8, lng float8, province text, city text, district text
           ) on commit drop`;
         const writable = await tx`
-          copy stg (kind, name, category, address, description, founded_year, photo_url, students, teachers,
+          copy stg (kind, name, category, level, npsn, address, description, founded_year, photo_url, students, teachers,
             attributes, lat, lng, province, city, district) from stdin`.writable();
         await pipeline(
           Readable.from(
             (function* () {
               for (const r of rows) {
-                yield `${[r.kind, r.name, r.category, r.address, r.description, r.foundedYear, r.photoUrl, r.students, r.teachers, r.attributes, r.lat, r.lng, r.province, r.city, r.district].map(copyField).join("\t")}\n`;
+                yield `${[r.kind, r.name, r.category, r.level, r.npsn, r.address, r.description, r.foundedYear, r.photoUrl, r.students, r.teachers, r.attributes, r.lat, r.lng, r.province, r.city, r.district].map(copyField).join("\t")}\n`;
               }
             })(),
           ),
           writable,
         );
-        await tx`
-          insert into locations (kind, name, category, address, description, founded_year, photo_url, students, teachers,
+        // Baris ber-NPSN yang sudah ada diperbarui (tarik ulang data Dapodik tidak menggandakan). Ganda dalam satu
+        // bongkahan diambil yang terakhir.
+        const res = await tx<{ inserted: boolean }[]>`
+          with numbered as (select *, row_number() over () as rn from stg),
+          uniq as (
+            select * from numbered where npsn is null
+            union all
+            (select distinct on (npsn) * from numbered where npsn is not null order by npsn, rn desc)
+          )
+          insert into locations (kind, name, category, level, npsn, address, description, founded_year, photo_url, students, teachers,
             attributes, geom, province, city, district, import_batch_id, created_by, updated_by)
-          select kind, name, category, address, description, founded_year, photo_url, students, teachers,
+          select kind, name, category, level, npsn, address, description, founded_year, photo_url, students, teachers,
             attributes::jsonb, ST_SetSRID(ST_MakePoint(lng, lat), 4326), province, city, district,
             ${id}, ${userId}, ${userId}
-          from stg`;
+          from uniq
+          on conflict (npsn) where npsn is not null do update set
+            name = excluded.name, category = excluded.category, level = excluded.level, address = excluded.address,
+            description = coalesce(excluded.description, locations.description),
+            founded_year = coalesce(excluded.founded_year, locations.founded_year),
+            students = coalesce(excluded.students, locations.students), teachers = coalesce(excluded.teachers, locations.teachers),
+            attributes = locations.attributes || excluded.attributes, geom = excluded.geom,
+            province = excluded.province, city = excluded.city, district = excluded.district,
+            updated_by = excluded.updated_by, version = locations.version + 1, updated_at = now()
+          returning (xmax = 0) as inserted`;
+        added += res.filter((r) => r.inserted).length;
+        updated += res.filter((r) => !r.inserted).length;
       });
-      inserted += rows.length;
-      await sql`update import_batches set total = ${total}, inserted = ${inserted}, failed = ${failed}, errors = ${sql.json(errors)} where id = ${id}`;
+      inserted = added;
+      await sql`update import_batches set total = ${total}, inserted = ${inserted}, updated = ${updated}, failed = ${failed}, errors = ${sql.json(errors)} where id = ${id}`;
     };
 
     const handleRow = (row: string[]): string | null => {
@@ -181,6 +206,8 @@ export class ImportService {
         kind: v.value.kind,
         name: v.value.name,
         category: v.value.category,
+        level: v.value.level,
+        npsn: v.value.npsn,
         address: v.value.address,
         description: v.value.description,
         foundedYear: v.value.foundedYear,
@@ -190,9 +217,9 @@ export class ImportService {
         attributes: JSON.stringify(v.value.attributes),
         lat: v.value.latitude,
         lng: v.value.longitude,
-        province: geo.province,
-        city: geo.city,
-        district: geo.district,
+        province: v.value.province ?? geo.province,
+        city: v.value.city ?? geo.city,
+        district: v.value.district ?? geo.district,
       });
       return null;
     };
@@ -225,14 +252,14 @@ export class ImportService {
         return this.get(id);
       }
       const rows = await sql<ImportBatch[]>`
-        update import_batches set status = 'selesai', total = ${total}, inserted = ${inserted}, failed = ${failed},
+        update import_batches set status = 'selesai', total = ${total}, inserted = ${inserted}, updated = ${updated}, failed = ${failed},
           errors = ${sql.json(errors)}, finished_at = now()
         where id = ${id} returning ${BATCH_COLUMNS(sql)}`;
       return rows[0]!;
     } catch (e) {
       const message = e instanceof Error ? e.message : "Impor gagal.";
       await sql`
-        update import_batches set status = 'gagal', message = ${message}, total = ${total}, inserted = ${inserted},
+        update import_batches set status = 'gagal', message = ${message}, total = ${total}, inserted = ${inserted}, updated = ${updated},
           failed = ${failed}, errors = ${sql.json(errors)}, finished_at = now() where id = ${id}`;
       throw e;
     }

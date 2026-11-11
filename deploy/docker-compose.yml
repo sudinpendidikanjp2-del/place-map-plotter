@@ -45,8 +45,11 @@ services:
       TRUST_PROXY: "true"
       GOOGLE_MAPS_KEY: ${GOOGLE_MAPS_KEY:-}
       GOOGLE_MAP_ID: ${GOOGLE_MAP_ID:-}
-      STATIC_MAPS_KEY: ${STATIC_MAPS_KEY:-}
+      GOOGLE_SERVER_KEY: ${GOOGLE_SERVER_KEY:-}
+      MEDIA_DIR: /data/media
       DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+    volumes:
+      - media:/data/media
 
   caddy:
     image: caddy:2
@@ -64,6 +67,7 @@ services:
       - caddy_config:/config
 
 volumes:
+  media:
   pgdata:
   caddy_data:
   caddy_config:
