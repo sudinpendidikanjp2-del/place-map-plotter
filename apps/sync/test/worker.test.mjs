@@ -9,6 +9,7 @@ import { COLUMNS, latestDetail, mapSchool } from "../src/mapper.mjs";
 import { toCsv } from "../src/csv.mjs";
 import { checkAgainstPrevious } from "../src/guard.mjs";
 import { collectDapodik, ServerTroubleError } from "../src/dapodik.mjs";
+import { describeFailure } from "../src/client.mjs";
 import { buildRows } from "../src/job.mjs";
 import { startFakePortal } from "./fake-portal.mjs";
 
@@ -201,4 +202,16 @@ test("tahap 2 yang terus gagal (HTTP 500) tidak membuang hasil tahap 1: sekolah 
     rmSync(dir, { recursive: true, force: true });
     await portal.close();
   }
+});
+
+test("pesan error klien meringkas halaman HTML Cloudflare dan memberi petunjuk, bukan menumpahkan HTML", () => {
+  const html = '<!DOCTYPE html>\n<!--[if lt IE 7]> <html class="no-js ie6 oldie"> <![endif]--><title>502 Bad gateway</title> cloudflare';
+  const msg = describeFailure({ path: "/api/sync/runs?source=dapodik", status: 502, headers: new Headers({ server: "cloudflare" }), text: html, base: "https://peta.contoh.go.id" });
+  assert.match(msg, /HTTP 502/);
+  assert.match(msg, /Cloudflare tidak bisa menjangkau/);
+  assert.match(msg, /PETA_URL=http:\/\/app:3000/);
+  assert.ok(!msg.includes("<"), "tidak ada HTML di pesan");
+  assert.match(describeFailure({ path: "/x", status: 401, body: { error: { message: "Token tidak valid." } } }), /Token tidak valid/);
+  assert.match(describeFailure({ path: "/x", status: 200, text: "<html>" }), /bukan API/);
+  assert.match(describeFailure({ path: "/x", status: 500, text: "boom" }), /boom/);
 });

@@ -50,6 +50,7 @@ for (const sig of ["SIGTERM", "SIGINT"]) process.on(sig, () => (stopping = true)
 console.log(`Pekerja menunggu permintaan (cek tiap ${pollMs / 1000} detik${everyMs ? `, terjadwal tiap ${everyMs / 3_600_000} jam` : ", tanpa jadwal"}).`);
 
 let lastFinished = 0;
+let lastError = "";
 while (!stopping) {
   try {
     const { run } = await client.claim(SOURCE, cfg.scopeLabel);
@@ -67,7 +68,13 @@ while (!stopping) {
       }
     }
   } catch (err) {
-    console.error(`Gagal menghubungi Peta Sekolah: ${err.message}`);
+    // Pesan yang sama tidak diulang tiap putaran; cukup sekali sampai berubah atau pulih.
+    if (err.message !== lastError) console.error(`Gagal menghubungi Peta Sekolah: ${err.message} (dicoba lagi tiap ${pollMs / 1000} detik)`);
+    lastError = err.message;
+    await sleep(pollMs);
+    continue;
   }
+  if (lastError) console.log("Terhubung kembali ke Peta Sekolah.");
+  lastError = "";
   await sleep(pollMs);
 }
