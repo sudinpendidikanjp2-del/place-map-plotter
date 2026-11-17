@@ -80,6 +80,13 @@ Pengujian: 11 tes domain dan 26 tes server lulus (termasuk impor gaya Dapodik, u
 - `apps/sync`: pekerja Playwright (dari skrip pengguna) dengan normalisasi wilayah dan jenjang, cache, penjaga hasil menyimpang (tolak bila di bawah 70% penarikan sebelumnya), dan pelaporan. Diuji terhadap portal palsu dan terhadap server asli. **Belum dijalankan terhadap portal Dapodik asli.**
 - Pengujian: 32 tes server, 8 tes pekerja, dan skrip peramban `scripts/e2e/sinkronisasi.cjs` lulus.
 
+**Pembaruan v8: mobile, pencarian fuzzy, kecamatan ganda**
+
+- **Mobile:** nama lokasi di layar Data tidak lagi dipotong (sampai tiga baris, baris lebih tinggi di ponsel). Di ponsel, kolom cari plus tombol Filter menggantikan sepuluh kontrol yang memenuhi layar. Tombol itu membuka lembar dari bawah. Semua dialog tampil sebagai lembar bawah di ponsel. Form lokasi tidak lagi melebihi lebar layar. Kartu ringkasan peta tidak menimpa tombol zoom. Baris pengguna dan riwayat sinkronisasi menumpuk rapi. Diperiksa dengan tangkapan layar 390 px pada tiap halaman.
+- **Pencarian fuzzy** (nama, alamat, NPSN): setiap kata harus ada, sebagai potongan teks atau mirip nama (pg_trgm `<%`, ambang 0,5, memakai indeks GIN yang sama). Singkatan dikenali dua arah: `sdn` sama dengan `sd negeri`, begitu juga `smpn`, `sman`, `smkn`, `mtsn`, `sdit`, dan lain-lain. Hasil diurutkan menurut kecocokan (awalan nama, frasa di nama, semua kata di nama, sisanya) dengan kursor yang stabil, hanya bila kandidatnya kurang dari 20.000 (kata umum seperti "sd" kembali ke urutan terbaru supaya tetap cepat). Pencarian cepat di bilah atas ikut memakainya.
+- **Filter kecamatan ganda:** parameter `district` boleh berulang (maksimal 50), OR antar kecamatan. Daftar kecamatan memakai dialog bercentang yang bisa dicari. Filter kecamatan tetap memakai kueri langsung, bukan pra-agregasi.
+- Pengujian: 39 tes server (4 tes pencarian dan kecamatan baru), 15 tes domain, 12 tes pekerja, dan skrip peramban `fitur.cjs`, `peta.cjs`, `keyboard.cjs` lulus. Waktu pencarian pada 500 ribu baris: 10 sampai 50 ms untuk kata spesifik, sekitar 0,5 detik untuk kata yang cocok dengan seratus ribu baris.
+
 **Belum dikerjakan atau berbeda dari PRD**
 - **Pencarian tempat (Places) dan impor batch nama tempat dari aplikasi lama tidak dipindahkan.** Keduanya memakai Places API berkuota dan tidak cocok untuk jutaan baris. Impor besar memakai CSV berkoordinat. Bisa ditambahkan bila diperlukan.
 - Kunci Maps web kini diberikan saat runtime lewat `/api/config` (`GOOGLE_MAPS_KEY`, `GOOGLE_MAP_ID`), bukan saat build, agar image Docker yang sama bisa dipakai di mana saja.

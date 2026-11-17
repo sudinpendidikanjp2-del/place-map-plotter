@@ -7,7 +7,7 @@ function describeFilter(f: LocationFilter): string {
   if (f.category) parts.push(`Kategori: ${f.category}`);
   if (f.province) parts.push(`Provinsi: ${f.province}`);
   if (f.city) parts.push(`Kota/Kab.: ${f.city}`);
-  if (f.district) parts.push(`Kecamatan: ${f.district}`);
+  if (f.districts?.length) parts.push(`Kecamatan: ${f.districts.join(", ")}`);
   if (f.q) parts.push(`Kata kunci: ${f.q}`);
   return parts.length ? parts.join(" | ") : "Semua data";
 }

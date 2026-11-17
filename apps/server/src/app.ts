@@ -207,7 +207,8 @@ export function createApp(config: Config, sql: Sql, opts: { trustProxy?: boolean
 
   router.get("/api/locations", "viewer", async (c) => {
     const q = c.url.searchParams;
-    const sort = q.get("sort") === "nama" ? "nama" : "baru";
+    const sortParam = q.get("sort");
+    const sort = sortParam === "nama" || sortParam === "relevan" ? sortParam : "baru";
     const limit = Math.min(Math.max(Number(q.get("limit") ?? 50) || 50, 1), 200);
     const cursor = q.get("cursor") ?? undefined;
     sendJson(c.res, 200, await repo.list(parseFilter(q), { sort, limit, ...(cursor ? { cursor } : {}) }));

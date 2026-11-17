@@ -189,7 +189,7 @@ export const api = {
     if (points) p.set("points", "1");
     return request<{ features: ClusterFeature[]; total: number; truncated: boolean }>(`/api/locations/clusters${qs(p)}`, { signal });
   },
-  list: (f: LocationFilter, o: { sort: "baru" | "nama"; limit?: number; cursor?: string | null }, signal?: AbortSignal) => {
+  list: (f: LocationFilter, o: { sort: "baru" | "nama" | "relevan"; limit?: number; cursor?: string | null }, signal?: AbortSignal) => {
     const p = filterToParams(f);
     p.set("sort", o.sort);
     p.set("limit", String(o.limit ?? 50));

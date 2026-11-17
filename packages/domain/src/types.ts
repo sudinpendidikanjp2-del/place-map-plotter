@@ -87,7 +87,8 @@ export interface LocationFilter {
   coords?: "none" | "geocoded";
   province?: string;
   city?: string;
-  district?: string;
+  /** Boleh lebih dari satu kecamatan sekaligus. */
+  districts?: string[];
   q?: string;
   bbox?: BBox;
   circle?: { lat: number; lng: number; radiusM: number };

@@ -141,7 +141,7 @@ function Inner({ location, at, categories, onClose, onSaved }: { location: Locat
 
   const isSchool = d.kind === "sekolah";
   return (
-    <form onSubmit={submit} noValidate className="grid gap-4 sm:grid-cols-2">
+    <form onSubmit={submit} noValidate className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <PlaceSearch
         onPick={(p: PlaceResult) =>
           setD((s) => ({ ...s, name: s.name || p.name, address: p.address ?? s.address, latitude: p.latitude.toFixed(6), longitude: p.longitude.toFixed(6) }))
@@ -205,7 +205,7 @@ function Inner({ location, at, categories, onClose, onSaved }: { location: Locat
       </Field>
       <details className="sm:col-span-2" open={Boolean(d.province || d.city || d.district)}>
         <summary className="cursor-pointer text-[13px] font-medium">Wilayah (otomatis dari alamat, isi bila ingin menimpa)</summary>
-        <div className="mt-3 grid gap-4 sm:grid-cols-3">
+        <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label="Provinsi" error={errors.province}>
             {(p) => <Input {...p} value={d.province} onChange={set("province")} />}
           </Field>

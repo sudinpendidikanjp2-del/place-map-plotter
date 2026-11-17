@@ -19,9 +19,9 @@ export function FilterProvider({ children }: { children: ReactNode }) {
       for (const k of Object.keys(next) as (keyof LocationFilter)[]) if (next[k] === undefined || next[k] === "") delete next[k];
       if (p.province !== undefined && p.province !== f.province) {
         delete next.city;
-        delete next.district;
+        delete next.districts;
       }
-      if (p.city !== undefined && p.city !== f.city) delete next.district;
+      if (p.city !== undefined && p.city !== f.city) delete next.districts;
       return next;
     });
   }, []);

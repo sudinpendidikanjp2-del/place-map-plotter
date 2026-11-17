@@ -33,9 +33,19 @@ const PNG = makePng(64, 48);
   await p.getByLabel("Jenjang").selectOption("SMA"); await p.waitForTimeout(900);
   const sma = await total(); step("filter jenjang SMA mempersempit daftar", sma > 0 && sma < all, `${all} -> ${sma}`);
   await p.getByLabel("Provinsi").selectOption({ index: 1 }); await p.waitForTimeout(700);
-  step("kecamatan aktif setelah memilih provinsi (tanpa memilih kota)", await p.getByLabel("Kecamatan").isEnabled());
-  await p.getByLabel("Kecamatan").selectOption({ index: 1 }); await p.waitForTimeout(900);
-  const kec = await total(); step("filter kecamatan mempersempit lagi", kec > 0 && kec <= sma, `${sma} -> ${kec}`);
+  const kecBtn = p.getByRole("button", { name: /^Kecamatan/ });
+  step("kecamatan aktif setelah memilih provinsi (tanpa memilih kota)", await kecBtn.isEnabled());
+  await kecBtn.click();
+  const kecBoxes = p.getByRole("group", { name: "Kecamatan" }).getByRole("checkbox");
+  await kecBoxes.nth(0).check(); await p.waitForTimeout(900);
+  const kec1 = await total();
+  step("filter kecamatan mempersempit lagi", kec1 > 0 && kec1 <= sma, `${sma} -> ${kec1}`);
+  if ((await kecBoxes.count()) > 1) {
+    await kecBoxes.nth(1).check(); await p.waitForTimeout(900);
+    const kec2 = await total();
+    step("memilih dua kecamatan melebarkan hasil (OR)", kec2 >= kec1, `${kec1} -> ${kec2}`);
+  }
+  await p.getByRole("button", { name: "Selesai" }).click();
   await p.getByRole("button", { name: "Atur ulang" }).click();
 
   // 2. cari titik dari nama tempat saat menambah lokasi

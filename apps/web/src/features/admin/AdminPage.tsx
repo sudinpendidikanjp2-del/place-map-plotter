@@ -48,13 +48,13 @@ export function AdminPage() {
               const self = u.id === me?.id;
               return (
                 <li key={u.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-4 py-3 last:border-0">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">
+                  <div className="min-w-0 basis-full sm:basis-0 sm:flex-1">
+                    <p className="break-words font-medium sm:truncate">
                       {u.name}
                       {self && <span className="ml-2 text-[13px] font-normal text-ink-2">(Anda)</span>}
                       {u.disabled && <span className="ml-2 rounded-md bg-danger/10 px-1.5 py-0.5 text-[12px] font-normal text-danger">Nonaktif</span>}
                     </p>
-                    <p className="truncate text-[13px] text-ink-2">
+                    <p className="break-all text-[13px] text-ink-2 sm:truncate sm:break-normal">
                       {u.email} · dibuat {formatDate(u.createdAt)}
                     </p>
                   </div>
@@ -63,7 +63,7 @@ export function AdminPage() {
                     value={u.role}
                     disabled={self || busyId === u.id}
                     onChange={(e) => void patch(u, { role: e.target.value as UserRole }, "Peran diperbarui.")}
-                    className="w-36"
+                    className="w-full sm:w-36"
                   >
                     {USER_ROLES.map((r) => (
                       <option key={r} value={r}>

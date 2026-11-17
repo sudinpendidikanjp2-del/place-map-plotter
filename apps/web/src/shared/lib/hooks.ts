@@ -49,3 +49,17 @@ export function useEscape(active: boolean, onEscape: () => void): void {
     return () => window.removeEventListener("keydown", h);
   }, [active, onEscape]);
 }
+
+/** Mengikuti media query CSS, mis. useMediaQuery("(min-width: 768px)"). Awalnya mengikuti jendela saat ini. */
+export function useMediaQuery(query: string): boolean {
+  const get = () => (typeof window !== "undefined" && typeof window.matchMedia === "function" ? window.matchMedia(query).matches : false);
+  const [matches, setMatches] = useState(get);
+  useEffect(() => {
+    const m = window.matchMedia(query);
+    const on = () => setMatches(m.matches);
+    on();
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, [query]);
+  return matches;
+}

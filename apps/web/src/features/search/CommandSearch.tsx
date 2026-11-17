@@ -30,7 +30,7 @@ export function CommandSearch({ open, onClose }: { open: boolean; onClose: () =>
     }
     const ctl = new AbortController();
     setState("loading");
-    api.list({ q: dq }, { sort: "nama", limit: 8 }, ctl.signal).then(
+    api.list({ q: dq }, { sort: "relevan", limit: 8 }, ctl.signal).then(
       (r) => {
         setResults(r.items);
         setState("idle");
@@ -66,7 +66,7 @@ export function CommandSearch({ open, onClose }: { open: boolean; onClose: () =>
           <Input
             id="cari-input"
             autoFocus
-            placeholder="Ketik nama atau alamat, minimal 2 huruf"
+            placeholder="Nama, alamat, atau NPSN"
             aria-label="Kata kunci"
             value={q}
             onChange={(e) => setQ(e.target.value)}

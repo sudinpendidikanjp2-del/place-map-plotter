@@ -67,14 +67,14 @@ function Runs() {
   const staleDays = last ? Math.floor((Date.now() - new Date(last.finishedAt ?? last.startedAt).getTime()) / 86_400_000) : null;
   return (
     <section aria-label="Riwayat sinkronisasi" className="overflow-hidden rounded-card border border-line bg-surface">
-      <div className="flex items-center justify-between border-b border-line px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
         <h2 className="font-semibold">Riwayat penarikan Dapodik</h2>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" icon="undo" onClick={runs.reload}>
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <Button variant="ghost" icon="undo" onClick={runs.reload} className="flex-1 sm:flex-none">
             Muat ulang
           </Button>
           {user?.role === "admin" && (
-            <Button variant="primary" icon="download" busy={busy} disabled={active} onClick={() => void request()}>
+            <Button variant="primary" icon="download" busy={busy} disabled={active} onClick={() => void request()} className="flex-1 sm:flex-none">
               Sinkronkan sekarang
             </Button>
           )}
