@@ -1,5 +1,5 @@
 import type postgres from "postgres";
-import { parseAddress, type ClusterFeature, type Location, type LocationFilter, type LocationInput, type Summary } from "@peta/domain";
+import { parseAddress, parseSearch, type ClusterFeature, type Location, type LocationFilter, type LocationInput, type Summary } from "@peta/domain";
 import type { Sql } from "../db/client.ts";
 import { badRequest, conflict, notFound } from "../http/errors.ts";
 import { isEmptyFilter } from "./filter.ts";
@@ -16,9 +16,12 @@ const SPATIAL_TOTAL_CAP = 10_000;
 /** Zoom ke atas ini tidak lagi dikelompokkan, titik ditampilkan satu per satu. */
 export const INDIVIDUAL_ZOOM = 17;
 
+/** Pencarian teks diurutkan menurut kecocokan hanya bila kandidatnya tidak lebih dari ini. */
+const RANK_LIMIT = 20_000;
+
 /** Pra-agregasi mencakup jenis, kategori, dan provinsi pada zoom 0 sampai 14. Filter lain memakai kueri langsung. */
 export function canUseCells(f: LocationFilter, zoom: number): boolean {
-  return zoom <= CELL_MAX_ZOOM && !f.q && !f.city && !f.district && !f.circle && !f.polygon && !f.coords;
+  return zoom <= CELL_MAX_ZOOM && !f.q && !f.city && !f.districts?.length && !f.circle && !f.polygon && !f.coords;
 }
 
 function duplicateNpsn(e: unknown): never {
@@ -50,10 +53,10 @@ export class LocationRepository {
     if (f.level) c.push(sql`level = ${f.level}`);
     if (f.province) c.push(sql`province = ${f.province}`);
     if (f.city) c.push(sql`city = ${f.city}`);
-    if (f.district) c.push(sql`district = ${f.district}`);
+    if (f.districts?.length) c.push(f.districts.length === 1 ? sql`district = ${f.districts[0]!}` : sql`district in ${sql(f.districts)}`);
     if (f.q) {
-      const like = `%${escapeLike(f.q)}%`;
-      c.push(/^\d{8}$/.test(f.q) ? sql`(name ilike ${like} or address ilike ${like} or npsn = ${f.q})` : sql`(name ilike ${like} or address ilike ${like})`);
+      const text = this.textMatch(f.q);
+      if (text) c.push(text);
     }
     if (f.bbox) {
       const b = f.bbox;
@@ -79,6 +82,42 @@ export class LocationRepository {
     }
     if (c.length === 0) return sql``;
     return sql`where ${c.reduce((a, b) => sql`${a} and ${b}`)}`;
+  }
+
+  /**
+   * Pencarian teks: setiap kata harus ada pada nama atau alamat, sebagai potongan teks (termasuk singkatan, mis. sdn
+   * dan sd negeri) atau mirip nama (salah ketik, lewat operator <% pg_trgm yang memakai indeks GIN yang sama).
+   */
+  private textMatch(q: string): Frag | null {
+    const sql = this.sql;
+    const parsed = parseSearch(q);
+    if (parsed.tokens.length === 0) return null;
+    const perToken = parsed.tokens.map((t) => {
+      const alts = t.alts.map((a) => {
+        const like = `%${escapeLike(a)}%`;
+        return sql`(name ilike ${like} or address ilike ${like})`;
+      });
+      if (t.fuzzy) alts.push(sql`${t.fuzzy} <% name`);
+      return alts.reduce((a, b) => sql`${a} or ${b}`);
+    });
+    const all = perToken.map((c) => sql`(${c})`).reduce((a, b) => sql`${a} and ${b}`);
+    return parsed.npsn ? sql`(${all} or npsn = ${parsed.npsn})` : sql`(${all})`;
+  }
+
+  /** Peringkat kecocokan, makin kecil makin sesuai: awalan nama, frasa di nama, semua kata di nama, sisanya. */
+  private relevance(q: string): Frag {
+    const sql = this.sql;
+    const parsed = parseSearch(q);
+    const phrase = escapeLike(parsed.phrase);
+    const inName = parsed.tokens
+      .map((t) => t.alts.map((a) => sql`name ilike ${`%${escapeLike(a)}%`}`).reduce((a, b) => sql`${a} or ${b}`))
+      .map((c) => sql`(${c})`)
+      .reduce((a, b) => sql`${a} and ${b}`);
+    return sql`(case
+      when name ilike ${`${phrase}%`} then 0
+      when name ilike ${`%${phrase}%`} then 1
+      when ${inName} then 2
+      else 3 end)`;
   }
 
   private columns(): Frag {
@@ -221,13 +260,13 @@ export class LocationRepository {
 
   async list(
     f: LocationFilter,
-    opts: { sort: "baru" | "nama"; limit: number; cursor?: string },
+    opts: { sort: "baru" | "nama" | "relevan"; limit: number; cursor?: string },
   ): Promise<{ items: Location[]; nextCursor: string | null; total: number; totalCapped: boolean }> {
     const sql = this.sql;
     const limit = Math.min(Math.max(opts.limit, 1), 200);
     const base = this.where(f);
     let cursorCond: Frag = sql``;
-    let cur: { n?: string; id: string } | null = null;
+    let cur: { n?: string; r?: number; id: string } | null = null;
     if (opts.cursor) {
       try {
         cur = JSON.parse(Buffer.from(opts.cursor, "base64url").toString("utf8"));
@@ -235,12 +274,26 @@ export class LocationRepository {
         throw badRequest("Kursor tidak valid.");
       }
       if (!cur || typeof cur.id !== "string" || !/^\d+$/.test(cur.id)) throw badRequest("Kursor tidak valid.");
+      if (cur.r !== undefined && ![0, 1, 2, 3].includes(cur.r)) throw badRequest("Kursor tidak valid.");
     }
+    // Urutan kecocokan hanya bermakna bila ada kata pencarian. Tanpa itu kembali ke urutan terbaru.
+    // Menghitung peringkat untuk jutaan kandidat (kata umum seperti "sd") lambat dan tidak berguna, jadi hanya dipakai
+    // bila kandidatnya sedikit. Keputusan dibuat di halaman pertama dan terbawa lewat kursor.
+    let ranked = false;
+    if (opts.sort === "relevan" && f.q && parseSearch(f.q).tokens.length) {
+      if (cur) ranked = cur.r !== undefined;
+      else {
+        const n = await sql<{ n: number }[]>`select count(*)::int as n from (select 1 from locations ${base} limit ${RANK_LIMIT + 1}) t`;
+        ranked = n[0]!.n <= RANK_LIMIT;
+      }
+    }
+    const rank = ranked ? this.relevance(f.q!) : null;
     const hasWhere = !isEmptyFilter(f);
     const joiner = hasWhere ? sql`and` : sql`where`;
     if (cur) {
-      cursorCond =
-        opts.sort === "nama"
+      cursorCond = rank
+        ? sql`${joiner} (${rank} > ${cur.r ?? 0}::int or (${rank} = ${cur.r ?? 0}::int and locations.id < ${cur.id}))`
+        : opts.sort === "nama"
           ? sql`${joiner} (name, id) > (${cur.n ?? ""}, ${cur.id})`
           : sql`${joiner} id < ${cur.id}`;
     }
@@ -248,8 +301,9 @@ export class LocationRepository {
     // perencana memindai seluruh tabel dari belakang (12 detik pada 10 juta baris). Ekspresi "+ 0" dan "|| ''"
     // mematikan indeks urutan sehingga hasil indeks filter dipakai lebih dulu lalu diurutkan.
     const selective = Boolean(f.q || f.circle || f.polygon || f.bbox);
-    const order =
-      opts.sort === "nama"
+    const order = rank
+      ? sql`order by ${rank}, (locations.id + 0) desc`
+      : opts.sort === "nama"
         ? selective
           ? sql`order by (locations.name || '') , locations.id`
           : sql`order by locations.name, locations.id`
@@ -258,7 +312,7 @@ export class LocationRepository {
           : sql`order by locations.id desc`;
     const cap = f.circle || f.polygon || f.bbox ? SPATIAL_TOTAL_CAP : TOTAL_CAP;
     const [rows, counted] = await Promise.all([
-      sql<Location[]>`select ${this.columns()} from locations ${base} ${cursorCond} ${order} limit ${limit + 1}`,
+      sql<(Location & { searchRank?: number })[]>`select ${this.columns()}${rank ? sql`, ${rank} as search_rank` : sql``} from locations ${base} ${cursorCond} ${order} limit ${limit + 1}`,
       opts.cursor
         ? Promise.resolve(null)
         : this.memo(`count|${cap}|${JSON.stringify(f)}`, () =>
@@ -266,12 +320,13 @@ export class LocationRepository {
           ),
     ]);
     const hasMore = rows.length > limit;
-    const items = hasMore ? rows.slice(0, limit) : rows;
-    const last = items[items.length - 1];
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const last = page[page.length - 1];
     const nextCursor =
       hasMore && last
-        ? Buffer.from(JSON.stringify(opts.sort === "nama" ? { n: last.name, id: last.id } : { id: last.id })).toString("base64url")
+        ? Buffer.from(JSON.stringify(rank ? { r: last.searchRank ?? 0, id: last.id } : opts.sort === "nama" ? { n: last.name, id: last.id } : { id: last.id })).toString("base64url")
         : null;
+    const items: Location[] = page.map(({ searchRank: _omit, ...rest }) => rest as Location);
 
     let total = 0;
     let totalCapped = false;

@@ -7,11 +7,11 @@ import { useFilter } from "../../app/filter.tsx";
 import { useRouter } from "../../app/router.tsx";
 import { useDebounced, useResource } from "../../shared/lib/hooks.ts";
 import { useTheme } from "../../shared/lib/theme.ts";
-import { formatNumber } from "../../shared/lib/format.ts";
+import { formatCompact, formatNumber } from "../../shared/lib/format.ts";
 import { Button, Dialog, IconButton, Spinner } from "../../shared/ui/primitives.tsx";
 import { useToast } from "../../shared/ui/toast.tsx";
 import { cn } from "../../shared/lib/cn.ts";
-import { FilterControls, useFacets } from "../locations/FilterControls.tsx";
+import { FilterToolbar, useFacets } from "../locations/FilterControls.tsx";
 import { LocationForm } from "../locations/LocationForm.tsx";
 import { ClusterLayer, type LayerStatus, type Viewport } from "./ClusterLayer.tsx";
 import { DetailCard } from "./DetailCard.tsx";
@@ -60,7 +60,6 @@ function MapScreen({ config }: { config: MapsConfig }) {
   const [layer, setLayer] = useState<{ status: LayerStatus; truncated: boolean; message?: string }>({ status: "loading", truncated: false });
   const [mode, setMode] = useState<DrawMode>("none");
   const [mapType, setMapType] = useState<"roadmap" | "hybrid">("roadmap");
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [labels, setLabels] = useState<boolean>(() => {
     try {
@@ -154,7 +153,6 @@ function MapScreen({ config }: { config: MapsConfig }) {
     }
   }
 
-  const activeCount = [filter.kind, filter.category, filter.level, filter.province, filter.city, filter.district, filter.q, filter.circle, filter.polygon].filter(Boolean).length;
   const drawing = mode !== "none";
 
   return (
@@ -182,16 +180,9 @@ function MapScreen({ config }: { config: MapsConfig }) {
       {route.open && <RoutePanelSlot stops={stops} onChange={(s) => setRoute((r) => ({ ...r, stops: s }))} onClose={() => setRoute((r) => ({ ...r, open: false }))} />}
 
       {/* Lapisan kontrol melayang di atas peta */}
-      <div className="pointer-events-none absolute inset-x-2 top-[4.25rem] z-10 flex flex-col gap-2 md:inset-x-4 md:top-20">
-        <div className="pointer-events-auto flex flex-col gap-2 self-start rounded-float border border-line bg-surface p-2.5 shadow-float md:max-w-[calc(100%-5rem)]">
-          <div className="flex items-center gap-2 md:hidden">
-            <Button icon="filter" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((o) => !o)}>
-              Filter{activeCount ? ` (${activeCount})` : ""}
-            </Button>
-          </div>
-          <div className={cn("md:block", filtersOpen ? "block" : "hidden")}>
-            <FilterControls />
-          </div>
+      <div className="pointer-events-none absolute left-2 right-[3.75rem] top-[4.25rem] z-10 flex flex-col gap-2 md:inset-x-4 md:top-20">
+        <div className="pointer-events-auto flex flex-col gap-2 self-stretch rounded-float border border-line bg-surface p-2.5 shadow-float md:max-w-[calc(100%-5rem)] md:self-start">
+          <FilterToolbar />
         </div>
 
         <ViewStats viewport={viewport} filter={filter} refreshKey={refreshKey} layer={layer} />
@@ -413,20 +404,38 @@ function ViewStats({ viewport, filter, refreshKey, layer }: { viewport: Viewport
   );
   const s = summary.data;
   return (
-    <div className="pointer-events-auto flex items-stretch divide-x divide-line self-start overflow-hidden rounded-float border border-line bg-surface shadow-float" aria-label="Ringkasan area peta" role="group">
-      <Stat label="Lokasi di area ini" value={s?.total} loading={summary.status === "loading" || layer.status === "loading"} primary />
+    <div className="pointer-events-auto flex items-stretch divide-x divide-line self-stretch overflow-hidden rounded-float md:self-start border border-line bg-surface shadow-float" aria-label="Ringkasan area peta" role="group">
+      <Stat label="Lokasi" longLabel="Lokasi di area ini" value={s?.total} loading={summary.status === "loading" || layer.status === "loading"} primary />
       <Stat label="Murid" value={s?.students} loading={summary.status === "loading"} />
       <Stat label="Guru" value={s?.teachers} loading={summary.status === "loading"} />
     </div>
   );
 }
 
-function Stat({ label, value, loading, primary }: { label: string; value: number | undefined; loading: boolean; primary?: boolean }) {
+function Stat({ label, longLabel, value, loading, primary }: { label: string; longLabel?: string; value: number | undefined; loading: boolean; primary?: boolean }) {
   return (
-    <div className={cn("px-4 py-2", primary && "bg-navy text-white")}>
-      <p className={cn("text-[12px]", primary ? "text-white/75" : "text-ink-2")}>{label}</p>
-      <p className={cn("num flex items-center gap-2 font-semibold leading-tight", primary ? "text-[28px] text-accent" : "text-xl")}>
-        {value === undefined ? "-" : formatNumber(value)}
+    <div className={cn("px-3 py-1.5 md:px-4 md:py-2", primary && "bg-navy text-white")}>
+      <p className={cn("text-[12px]", primary ? "text-white/75" : "text-ink-2")}>
+        {longLabel ? (
+          <>
+            <span className="md:hidden">{label}</span>
+            <span className="hidden md:inline">{longLabel}</span>
+          </>
+        ) : (
+          label
+        )}
+      </p>
+      <p className={cn("num flex items-center gap-2 font-semibold leading-tight", primary ? "text-2xl text-accent md:text-[28px]" : "text-base md:text-xl")}>
+        {value === undefined ? (
+          "-"
+        ) : primary ? (
+          formatNumber(value)
+        ) : (
+          <>
+            <span className="md:hidden">{formatCompact(value)}</span>
+            <span className="hidden md:inline">{formatNumber(value)}</span>
+          </>
+        )}
         {loading && <Spinner className="size-3.5" />}
       </p>
     </div>

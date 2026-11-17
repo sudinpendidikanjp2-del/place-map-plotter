@@ -49,8 +49,9 @@ export function parseFilter(q: URLSearchParams): LocationFilter {
   if (province) filter.province = province;
   const city = str(q.get("city"), 100);
   if (city) filter.city = city;
-  const district = str(q.get("district"), 100);
-  if (district) filter.district = district;
+  const districts = [...new Set(q.getAll("district").map((d) => str(d, 100)).filter((d): d is string => Boolean(d)))];
+  if (districts.length > 50) throw badRequest("Terlalu banyak kecamatan (maksimal 50).");
+  if (districts.length) filter.districts = districts;
   const text = str(q.get("q"), 100);
   if (text) filter.q = text;
 

@@ -8,7 +8,7 @@ import { formatCompact, formatMonth, formatNumber } from "../../shared/lib/forma
 import { useResource } from "../../shared/lib/hooks.ts";
 import { Button, DownloadLink, EmptyState, ErrorState, SkeletonRows } from "../../shared/ui/primitives.tsx";
 import { useToast } from "../../shared/ui/toast.tsx";
-import { FilterControls } from "../locations/FilterControls.tsx";
+import { FilterToolbar } from "../locations/FilterControls.tsx";
 import { KindBadge } from "../locations/kind.tsx";
 
 const INDONESIA = { west: 95, south: -11, east: 141, north: 6 };
@@ -89,7 +89,7 @@ export function ReportPage() {
       </div>
 
       <div className="rounded-card border border-line bg-surface p-3">
-        <FilterControls />
+        <FilterToolbar />
       </div>
 
       {summary.status === "loading" && !s && <SkeletonRows rows={5} />}

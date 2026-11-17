@@ -9,7 +9,7 @@ export function filterToParams(f: LocationFilter): URLSearchParams {
   if (f.coords) q.set("coords", f.coords);
   if (f.province) q.set("province", f.province);
   if (f.city) q.set("city", f.city);
-  if (f.district) q.set("district", f.district);
+  for (const d of f.districts ?? []) q.append("district", d);
   if (f.q) q.set("q", f.q);
   if (f.bbox) {
     q.set("west", String(f.bbox.west));
@@ -23,5 +23,5 @@ export function filterToParams(f: LocationFilter): URLSearchParams {
 }
 
 export function hasActiveFilter(f: LocationFilter): boolean {
-  return Boolean(f.kind || f.category || f.level || f.coords || f.province || f.city || f.district || f.q || f.circle || f.polygon);
+  return Boolean(f.kind || f.category || f.level || f.coords || f.province || f.city || f.districts?.length || f.q || f.circle || f.polygon);
 }

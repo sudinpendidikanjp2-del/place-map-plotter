@@ -5,15 +5,27 @@ import { useAuth } from "../../app/auth.tsx";
 import { useFilter } from "../../app/filter.tsx";
 import { useRouter } from "../../app/router.tsx";
 import { formatNumber } from "../../shared/lib/format.ts";
+import { useMediaQuery } from "../../shared/lib/hooks.ts";
 import { Button, Dialog, DownloadLink, EmptyState, ErrorState, Field, Input, Select, SkeletonRows } from "../../shared/ui/primitives.tsx";
 import { VirtualList } from "../../shared/ui/VirtualList.tsx";
 import { useToast } from "../../shared/ui/toast.tsx";
-import { FilterControls, useFacets } from "./FilterControls.tsx";
+import { FilterToolbar, useFacets } from "./FilterControls.tsx";
 import { LocationForm } from "./LocationForm.tsx";
 import { KindBadge } from "./kind.tsx";
 import { IconButton } from "../../shared/ui/primitives.tsx";
 
-const ROW = 60;
+/** Tinggi baris: di ponsel nama boleh dua baris dan ada baris keterangan, jadi lebih tinggi. */
+const ROW_WIDE = 60;
+const ROW_NARROW = 112;
+
+function LocationFlags({ l }: { l: Location }) {
+  return (
+    <>
+      {l.latitude === null && <span className="ml-2 rounded-md bg-surface-2 px-1.5 py-0.5 text-[12px] font-normal text-ink-2 max-md:ml-0 max-md:mr-1.5">Tanpa titik</span>}
+      {l.coordSource === "geocoded" && <span className="ml-2 rounded-md bg-accent/25 px-1.5 py-0.5 text-[12px] font-normal max-md:ml-0 max-md:mr-1.5">Titik perkiraan</span>}
+    </>
+  );
+}
 
 export function DataPage() {
   const { can } = useAuth();
@@ -21,7 +33,11 @@ export function DataPage() {
   const { navigate } = useRouter();
   const toast = useToast();
   const facets = useFacets();
-  const [sort, setSort] = useState<"baru" | "nama">("baru");
+  const wide = useMediaQuery("(min-width: 768px)");
+  const row = wide ? ROW_WIDE : ROW_NARROW;
+  const [sort, setSort] = useState<"baru" | "nama" | "relevan">("baru");
+  // Saat ada kata pencarian, urutan "terbaru" diganti urutan kecocokan agar yang paling mirip di atas.
+  const effectiveSort = filter.q && sort === "baru" ? "relevan" : sort;
   const [items, setItems] = useState<Location[]>([]);
   const [total, setTotal] = useState<{ n: number; capped: boolean } | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -43,7 +59,7 @@ export function DataPage() {
       const my = ++gen.current;
       setStatus(after ? "more" : "loading");
       try {
-        const r: ListResult = await api.list(filter, { sort, limit: 100, cursor: after });
+        const r: ListResult = await api.list(filter, { sort: effectiveSort, limit: 100, cursor: after });
         if (my !== gen.current) return;
         setItems((prev) => (after ? [...prev, ...r.items] : r.items));
         setCursor(r.nextCursor);
@@ -56,7 +72,7 @@ export function DataPage() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [filterKey, sort],
+    [filterKey, effectiveSort],
   );
 
   useEffect(() => {
@@ -117,35 +133,47 @@ export function DataPage() {
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Data lokasi</h1>
-          <p className="text-ink-2">
-            {total ? (
-              <>
-                <span className="num font-medium text-ink">{formatNumber(total.n)}{total.capped ? "+" : ""}</span> lokasi{hasActiveFilter(filter) ? " sesuai filter" : ""}
-              </>
-            ) : (
-              "Memuat jumlah"
-            )}
-          </p>
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Data lokasi</h1>
+            <p className="text-ink-2">
+              {total ? (
+                <>
+                  <span className="num font-medium text-ink">{formatNumber(total.n)}{total.capped ? "+" : ""}</span> lokasi{hasActiveFilter(filter) ? " sesuai filter" : ""}
+                </>
+              ) : (
+                "Memuat jumlah"
+              )}
+            </p>
+          </div>
+          {canEdit && (
+            <span className="md:hidden">
+              <Button variant="primary" icon="plus" onClick={() => setEditing("new")}>
+                Tambah
+              </Button>
+            </span>
+          )}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Select aria-label="Urutkan" value={sort} onChange={(e) => setSort(e.target.value as "baru" | "nama")} className="w-40">
+        <div className="flex items-center gap-2">
+          <Select aria-label="Urutkan" value={effectiveSort} onChange={(e) => setSort(e.target.value as "baru" | "nama" | "relevan")} className="min-w-0 flex-1 md:w-44 md:flex-none">
+            {filter.q && <option value="relevan">Paling sesuai</option>}
             <option value="baru">Terbaru dulu</option>
             <option value="nama">Nama A ke Z</option>
           </Select>
-          <DownloadLink href={api.exportCsvUrl(filter)} icon="download">Ekspor CSV</DownloadLink>
+          <DownloadLink href={api.exportCsvUrl(filter)} icon="download" className="shrink-0">Ekspor CSV</DownloadLink>
           {canEdit && (
-            <Button variant="primary" icon="plus" onClick={() => setEditing("new")}>
-              Tambah
-            </Button>
+            <span className="hidden md:block">
+              <Button variant="primary" icon="plus" onClick={() => setEditing("new")}>
+                Tambah
+              </Button>
+            </span>
           )}
         </div>
       </div>
 
       <div className="rounded-card border border-line bg-surface p-3">
-        <FilterControls />
+        <FilterToolbar />
       </div>
 
       <section aria-label="Tabel lokasi" className="overflow-hidden rounded-card border border-line bg-surface">
@@ -166,7 +194,7 @@ export function DataPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-[2.5rem_1fr_auto] items-center gap-3 border-b border-line bg-surface-2 px-4 py-2 text-[13px] font-medium text-ink-2 md:grid-cols-[2.5rem_minmax(0,2.4fr)_minmax(0,1fr)_minmax(0,1.4fr)_5rem_5rem_5.5rem]">
+        <div className="grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-line bg-surface-2 px-3 py-2 text-[13px] font-medium text-ink-2 md:px-4 md:grid-cols-[2.5rem_minmax(0,2.4fr)_minmax(0,1fr)_minmax(0,1.4fr)_5rem_5rem_5.5rem]">
           <span>
             {canEdit && (
               <input
@@ -209,27 +237,31 @@ export function DataPage() {
           <VirtualList
             label="Daftar lokasi"
             items={items}
-            rowHeight={ROW}
+            rowHeight={row}
             className="h-[calc(100dvh-24rem)] min-h-80"
             onEndReached={() => cursor && status === "ready" && void load(cursor)}
             render={(l) => (
-              <div className="grid h-full grid-cols-[2.5rem_1fr_auto] items-center gap-3 border-b border-line px-4 hover:bg-surface-2 md:grid-cols-[2.5rem_minmax(0,2.4fr)_minmax(0,1fr)_minmax(0,1.4fr)_5rem_5rem_5.5rem]">
+              <div className="grid h-full grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-line px-3 hover:bg-surface-2 md:grid-cols-[2.5rem_minmax(0,2.4fr)_minmax(0,1fr)_minmax(0,1.4fr)_5rem_5rem_5.5rem] md:px-4">
                 <span>
                   {canEdit ? (
-                    <input type="checkbox" aria-label={`Pilih ${l.name}`} checked={allMatching || selected.has(l.id)} onChange={() => toggle(l.id)} className="size-4 accent-[var(--navy)]" />
+                    <input type="checkbox" aria-label={`Pilih ${l.name}`} checked={allMatching || selected.has(l.id)} onChange={() => toggle(l.id)} className="size-5 accent-[var(--navy)] md:size-4" />
                   ) : (
                     <KindBadge kind={l.kind} size={24} />
                   )}
                 </span>
                 <button type="button" onClick={() => navigate(`/?lokasi=${l.id}`)} className="flex min-w-0 items-center gap-3 rounded-control text-left">
-                  {canEdit && <KindBadge kind={l.kind} size={28} />}
+                  {canEdit && <span className="hidden sm:block"><KindBadge kind={l.kind} size={28} /></span>}
                   <span className="min-w-0">
-                    <span className="block truncate font-medium">
+                    <span className="line-clamp-3 break-words font-medium leading-snug md:block md:truncate">
                       {l.name}
-                      {l.latitude === null && <span className="ml-2 rounded-md bg-surface-2 px-1.5 py-0.5 text-[12px] font-normal text-ink-2">Tanpa titik</span>}
-                      {l.coordSource === "geocoded" && <span className="ml-2 rounded-md bg-accent/25 px-1.5 py-0.5 text-[12px] font-normal">Titik perkiraan</span>}
+                      <span className="hidden md:inline">
+                        <LocationFlags l={l} />
+                      </span>
                     </span>
-                    <span className="block truncate text-[13px] text-ink-2 md:hidden">{[l.level ?? l.category, l.city].filter(Boolean).join(" · ")}</span>
+                    <span className="mt-0.5 line-clamp-1 break-words text-[13px] leading-snug text-ink-2 md:hidden">{[l.level ?? l.category, l.district ?? l.city].filter(Boolean).join(" · ")}</span>
+                    <span className="mt-1 block md:hidden">
+                      <LocationFlags l={l} />
+                    </span>
                     <span className="hidden truncate text-[13px] text-ink-2 md:block">{l.address ?? "Alamat belum diisi"}</span>
                   </span>
                 </button>
@@ -237,7 +269,7 @@ export function DataPage() {
                 <span className="hidden truncate text-ink-2 md:block">{[l.district, l.city, l.province].filter(Boolean).join(", ") || "Belum diketahui"}</span>
                 <span className="num hidden text-right md:block">{formatNumber(l.students)}</span>
                 <span className="num hidden text-right md:block">{formatNumber(l.teachers)}</span>
-                <span className="flex justify-end">
+                <span className="flex flex-col justify-end md:flex-row">
                   {canEdit && (
                     <>
                       <IconButton icon="edit" label={`Ubah ${l.name}`} onClick={() => setEditing(l)} />

@@ -135,12 +135,15 @@ export function Dialog({
   title,
   children,
   wide,
+  sheet = true,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
   wide?: boolean;
+  /** Di ponsel tampil sebagai lembar dari bawah layar (lebih mudah dijangkau ibu jari). Bawaan: ya. */
+  sheet?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -154,15 +157,20 @@ export function Dialog({
     <dialog
       ref={ref}
       aria-labelledby={titleId}
-      onClose={onClose}
+      // Dialog bertingkat (mis. pilihan kecamatan di dalam lembar filter): penutupan dialog dalam tidak boleh menutup dialog luar.
+      onClose={(e) => {
+        e.stopPropagation();
+        if (e.target === ref.current) onClose();
+      }}
       onClick={(e) => e.target === ref.current && onClose()}
       className={cn(
         "m-auto max-h-[90dvh] w-[calc(100%-2rem)] overflow-hidden rounded-float border border-line bg-surface p-0 shadow-float",
         wide ? "max-w-2xl" : "max-w-md",
+        sheet && "max-md:m-0 max-md:mt-auto max-md:max-h-[88dvh] max-md:w-full max-md:max-w-none max-md:rounded-b-none",
       )}
     >
       {open && (
-        <div className="flex max-h-[90dvh] flex-col">
+        <div className={cn("flex max-h-[90dvh] flex-col", sheet && "max-md:max-h-[88dvh]")}>
           <div className="flex items-center justify-between gap-4 border-b border-line px-5 py-3.5">
             <h2 id={titleId} className="text-base font-semibold">
               {title}
@@ -237,9 +245,9 @@ export function Kbd({ children }: { children: ReactNode }) {
 }
 
 /** Tautan yang tampil seperti tombol sekunder, untuk unduhan. */
-export function DownloadLink({ href, children, icon }: { href: string; children: ReactNode; icon?: IconName }) {
+export function DownloadLink({ href, children, icon, className }: { href: string; children: ReactNode; icon?: IconName; className?: string }) {
   return (
-    <a href={href} download className="inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-control border border-line bg-surface px-4 text-sm font-medium transition-colors duration-150 hover:bg-surface-2">
+    <a href={href} download className={cn("inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-control border border-line bg-surface px-4 text-sm font-medium transition-colors duration-150 hover:bg-surface-2", className)}>
       {icon && <Icon name={icon} />}
       {children}
     </a>
